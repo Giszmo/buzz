@@ -26,6 +26,8 @@ const MAX_STREAMING_AGENTS = 2;
 type ChannelAgentDraftPreviewProps = {
   agents: BotActivityAgent[];
   channelId: string | null;
+  /** Gutter override, so the dock lines up with its host composer. */
+  className?: string;
   profiles?: UserProfileLookup;
   workingBotPubkeys: string[];
 };
@@ -63,6 +65,7 @@ function resolveAgentName(pubkey: string, profiles?: UserProfileLookup) {
 export function ChannelAgentDraftPreview({
   agents,
   channelId,
+  className,
   profiles,
   workingBotPubkeys,
 }: ChannelAgentDraftPreviewProps) {
@@ -101,7 +104,10 @@ export function ChannelAgentDraftPreview({
 
   return (
     <div
-      className="pointer-events-auto flex flex-col gap-1.5 px-5 pb-1.5"
+      className={cn(
+        "pointer-events-auto flex flex-col gap-1.5 px-5 pb-1.5",
+        className,
+      )}
       data-testid="channel-agent-draft-previews"
     >
       {streamingAgents.map((agent) => (

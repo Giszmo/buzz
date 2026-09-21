@@ -16,7 +16,11 @@ import type {
 } from "@/features/home/lib/inbox";
 import { getProjectInboxReference } from "@/features/home/lib/projectInbox";
 import { ProjectInboxDetail } from "@/features/home/ui/ProjectInboxDetail";
+import { useChannelWorkingAgentPubkeys } from "@/features/agents/agentWorkingSignal";
+import { ChannelAgentDraftPreview } from "@/features/channels/ui/ChannelAgentDraftPreview";
+import type { BotActivityAgent } from "@/features/channels/ui/BotActivityBar";
 import { ChannelMembersBar } from "@/features/channels/ui/ChannelMembersBar";
+import { truncateNpub } from "@/shared/lib/pubkey";
 import { useCommunities } from "@/features/communities/useCommunities";
 import { formatInboxTypeLabel } from "@/features/home/lib/inbox";
 import {
@@ -215,6 +219,22 @@ function InboxMessageDetailPane({
   const conversationId = item?.conversationId ?? null;
   const selectedChannelId = item?.item.channelId ?? null;
   const isDirectMessage = item?.item.channelType === "dm";
+  // Agents draft above this composer too: the inbox is where threads and DMs
+  // are read, so a reply forming in the channel has to be visible from here.
+  const workingAgentPubkeys = useChannelWorkingAgentPubkeys(selectedChannelId);
+  const draftPreviewAgents = React.useMemo<BotActivityAgent[]>(
+    () =>
+      workingAgentPubkeys
+        .filter((pubkey) => agentPubkeys?.has(pubkey) === true)
+        .map((pubkey) => {
+          const profile = profiles?.[pubkey.toLowerCase()];
+          return {
+            pubkey,
+            name: profile?.displayName ?? profile?.name ?? truncateNpub(pubkey),
+          };
+        }),
+    [agentPubkeys, profiles, workingAgentPubkeys],
+  );
   // Build the plain, non-virtualized timeline the shared hook anchors against.
   // Live arrivals rerun its layout compensation without changing the target.
 
@@ -814,6 +834,13 @@ function InboxMessageDetailPane({
             }}
           />
           <div className="pointer-events-auto">
+            <ChannelAgentDraftPreview
+              agents={draftPreviewAgents}
+              channelId={selectedChannelId}
+              className="px-4"
+              profiles={profiles}
+              workingBotPubkeys={workingAgentPubkeys}
+            />
             <MessageComposer
               audienceContext={
                 isDirectMessage

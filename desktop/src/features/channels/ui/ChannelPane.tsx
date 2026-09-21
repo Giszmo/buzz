@@ -914,6 +914,14 @@ export const ChannelPane = React.memo(function ChannelPane({
                     />
                   ) : null
                 }
+                agentDraftPreview={
+                  <ChannelAgentDraftPreview
+                    agents={activityAgents}
+                    channelId={activeChannel?.id ?? null}
+                    profiles={profiles}
+                    workingBotPubkeys={threadComposerBotTypingPubkeys}
+                  />
+                }
               />
             );
             return wrapThreadPanel(panel);

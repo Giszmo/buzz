@@ -123,6 +123,12 @@ type MessageThreadPanelProps = ThreadPanelLayoutProps & {
   videoReviewPresentation?: VideoReviewPresentation;
   activityAccessoryContent?: React.ReactNode;
   activityAccessoryVisible: boolean;
+  /**
+   * The draft an agent is writing, docked above the thread composer. Passed in
+   * rather than built here so the panel stays agnostic about which agents the
+   * channel knows; the channel owns that wiring.
+   */
+  agentDraftPreview?: React.ReactNode;
   widthPx: number;
   isFollowingThread?: boolean;
   isMessageUnreadById?: (messageId: string) => boolean;
@@ -203,6 +209,7 @@ export function MessageThreadPanel({
   threadTypingPubkeys,
   activityAccessoryContent,
   activityAccessoryVisible,
+  agentDraftPreview,
   canResetWidth,
   splitPaneClamp,
   showBackButton,
@@ -824,6 +831,7 @@ export function MessageThreadPanel({
             hasConstrainedColumn ? { maxWidth: columnMaxWidthPx } : undefined
           }
         >
+          {agentDraftPreview}
           <div
             className={cn(
               "composer-dock composer-overlay-corner-masks relative pointer-events-auto",

@@ -310,6 +310,147 @@ test.describe("agent draft streaming above the composer", () => {
     await expect(page.getByTestId("agent-draft-preview")).toHaveCount(0);
   });
 
+  test("renders above the thread composer, not only the channel one", async ({
+    page,
+  }) => {
+    // Threads are where a reply is usually waited for, and the thread drawer
+    // has its own composer. Before this the dock was mounted on the channel
+    // composer alone, so opening a thread hid the forming reply entirely.
+    await openChannelIdle(page);
+    const rootId = "d4".repeat(32);
+    await page.evaluate(
+      ({ id, pubkey }) => {
+        window.__BUZZ_E2E_EMIT_MOCK_MESSAGE__?.({
+          channelName: "agents",
+          content: "Thread root the agent is answering in.",
+          id,
+          pubkey,
+        });
+      },
+      { id: rootId, pubkey: STRANGER_PUBKEY },
+    );
+    await page.getByTestId(`reply-message-${rootId}`).click({ force: true });
+    await expect(page.getByTestId("message-thread-panel")).toBeVisible();
+
+    await emitChannelDraft(page, {
+      part: "reply",
+      pubkey: STRANGER_PUBKEY,
+      seq: 1,
+      text: REPLY_TEXT,
+    });
+
+    const threadCard = page
+      .getByTestId("thread-composer-overlay")
+      .getByTestId("agent-draft-preview");
+    await expect(threadCard).toBeVisible();
+    await expect(threadCard).toHaveAttribute("data-draft-source", "channel");
+    await expect(
+      threadCard.getByTestId("agent-draft-preview-text"),
+    ).toContainText(REPLY_TEXT);
+
+    await page.screenshot({
+      animations: "disabled",
+      path: `${SHOTS}/draft-thread-composer.png`,
+    });
+
+    await emitChannelDraft(page, {
+      done: true,
+      part: "reply",
+      pubkey: STRANGER_PUBKEY,
+      seq: 2,
+      text: REPLY_TEXT,
+    });
+    await expect(threadCard).toHaveCount(0);
+  });
+
+  test("renders above the inbox composer", async ({ page }) => {
+    // The inbox is a second reading surface for the same conversations, with a
+    // composer of its own: a reader who moves between threads from here saw
+    // nothing at all before this mount existed.
+    await page.goto("/");
+    await expect(page.getByTestId("home-inbox-list")).toBeVisible();
+    await page.waitForFunction(
+      () =>
+        typeof window.__BUZZ_E2E_EMIT_MOCK_MESSAGE__ === "function" &&
+        typeof window.__BUZZ_E2E_PUSH_MOCK_FEED_ITEM__ === "function",
+    );
+
+    const mentionId = await page.evaluate(
+      ({ channelId, currentPubkey, senderPubkey }) => {
+        const mention = window.__BUZZ_E2E_EMIT_MOCK_MESSAGE__?.({
+          channelName: "agents",
+          content: "Mention that lands in the inbox.",
+          id: "e5".repeat(32),
+          mentionPubkeys: [currentPubkey],
+          pubkey: senderPubkey,
+        });
+        if (!mention) {
+          throw new Error("Mock message bridge is unavailable.");
+        }
+        window.__BUZZ_E2E_PUSH_MOCK_FEED_ITEM__?.({
+          category: "mention",
+          channel_id: channelId,
+          channel_name: "agents",
+          content: mention.content,
+          created_at: mention.created_at,
+          id: mention.id,
+          kind: mention.kind,
+          pubkey: mention.pubkey,
+          tags: mention.tags,
+        });
+        return mention.id;
+      },
+      {
+        channelId: AGENTS_CHANNEL_ID,
+        currentPubkey: TEST_IDENTITIES.tyler.pubkey,
+        senderPubkey: STRANGER_PUBKEY,
+      },
+    );
+
+    await page.getByTestId(`home-inbox-item-${mentionId}`).click();
+    await expect(page.getByTestId("home-inbox-detail")).toContainText(
+      "lands in the inbox",
+    );
+    await page.waitForFunction(
+      ({ channelName, kind }) =>
+        window.__BUZZ_E2E_HAS_MOCK_LIVE_SUBSCRIPTION__?.({
+          channelName,
+          kind,
+        }) ?? false,
+      { channelName: "agents", kind: KIND_AGENT_DRAFT_PREVIEW },
+    );
+
+    await emitChannelDraft(page, {
+      part: "reply",
+      pubkey: STRANGER_PUBKEY,
+      seq: 1,
+      text: REPLY_TEXT,
+    });
+
+    const inboxCard = page
+      .getByTestId("home-inbox-detail-composer-overlay")
+      .getByTestId("agent-draft-preview");
+    await expect(inboxCard).toBeVisible();
+    await expect(inboxCard).toHaveAttribute("data-draft-source", "channel");
+    await expect(
+      inboxCard.getByTestId("agent-draft-preview-text"),
+    ).toContainText(REPLY_TEXT);
+
+    await page.screenshot({
+      animations: "disabled",
+      path: `${SHOTS}/draft-inbox-composer.png`,
+    });
+
+    await emitChannelDraft(page, {
+      done: true,
+      part: "reply",
+      pubkey: STRANGER_PUBKEY,
+      seq: 2,
+      text: REPLY_TEXT,
+    });
+    await expect(inboxCard).toHaveCount(0);
+  });
+
   test("a draft from another channel never leaks into this one", async ({
     page,
   }) => {
