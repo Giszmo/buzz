@@ -3,6 +3,12 @@ import { Loader2 } from "lucide-react";
 
 import { useAgentTranscript } from "@/features/agents/ui/useObserverEvents";
 import {
+  setAgentDraftPreviewEnabled,
+  setAgentDraftThoughtsEnabled,
+  useAgentDraftPreviewEnabled,
+  useAgentDraftThoughtsEnabled,
+} from "@/features/agents/ui/agentDraftPreviewPreference";
+import {
   getActivityHeadline,
   isMeaningfulItem,
   isSpineItem,
@@ -17,6 +23,7 @@ import {
   PopoverTrigger,
 } from "@/shared/ui/popover";
 import { Shimmer } from "@/shared/ui/Shimmer";
+import { Switch } from "@/shared/ui/switch";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
 
 export type BotActivityAgent = Pick<ManagedAgent, "pubkey" | "name">;
@@ -44,6 +51,8 @@ export function BotActivityComposerAction({
   variant = "toolbar",
 }: BotActivityBarProps) {
   const [open, setOpen] = React.useState(false);
+  const draftPreviewEnabled = useAgentDraftPreviewEnabled();
+  const draftThoughtsEnabled = useAgentDraftThoughtsEnabled();
   const hoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -273,7 +282,76 @@ export function BotActivityComposerAction({
             );
           })}
         </div>
+        <div className="mt-1 border-t border-border/60 pt-1">
+          <DraftPreferenceRow
+            checked={draftPreviewEnabled}
+            label="Show reply as it's written"
+            onToggle={() => setAgentDraftPreviewEnabled(!draftPreviewEnabled)}
+            testId="bot-activity-toggle-draft-preview"
+            title={
+              draftPreviewEnabled
+                ? "Stop streaming the forming reply above the composer."
+                : "Stream the forming reply above the composer."
+            }
+          />
+          <DraftPreferenceRow
+            checked={draftThoughtsEnabled}
+            disabled={!draftPreviewEnabled}
+            label="Include thoughts"
+            onToggle={() => setAgentDraftThoughtsEnabled(!draftThoughtsEnabled)}
+            testId="bot-activity-toggle-draft-thoughts"
+            title={
+              draftPreviewEnabled
+                ? draftThoughtsEnabled
+                  ? "Stop showing the agent's reasoning."
+                  : "Also show the agent's reasoning while it writes."
+                : "Turn on the streaming reply first."
+            }
+          />
+        </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function DraftPreferenceRow({
+  checked,
+  disabled = false,
+  label,
+  onToggle,
+  testId,
+  title,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  onToggle: () => void;
+  testId: string;
+  title: string;
+}) {
+  return (
+    <button
+      aria-checked={checked}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
+        disabled
+          ? "cursor-not-allowed text-muted-foreground/60"
+          : "text-foreground hover:bg-accent hover:text-accent-foreground",
+      )}
+      data-testid={testId}
+      disabled={disabled}
+      onClick={onToggle}
+      role="switch"
+      title={title}
+      type="button"
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <Switch
+        aria-hidden="true"
+        checked={checked && !disabled}
+        className="pointer-events-none shrink-0"
+        tabIndex={-1}
+      />
+    </button>
   );
 }

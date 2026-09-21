@@ -51,6 +51,7 @@ export default defineConfig({
         "**/channel-star.spec.ts",
         "**/channel-controls.spec.ts",
         "**/channel-activity-popover.spec.ts",
+        "**/channel-agent-draft-stream.spec.ts",
         "**/active-turn-resilience.spec.ts",
         "**/agent-control-regressions.spec.ts",
         "**/profile-active-turn.spec.ts",

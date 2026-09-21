@@ -44,6 +44,7 @@ import { useFocusDrawerPresence } from "@/features/channels/ui/useFocusDrawerPre
 import { useChannelWorkingAgentPubkeys } from "@/features/agents/agentWorkingSignal";
 import { useCardMintJobs } from "@/features/agents/cardMintStore";
 import { BotActivityComposerAction } from "@/features/channels/ui/BotActivityBar";
+import { ChannelAgentDraftPreview } from "@/features/channels/ui/ChannelAgentDraftPreview";
 import { ChannelComposerActivityAccessory } from "@/features/channels/ui/ChannelComposerActivityAccessory";
 import {
   containsWelcomePersonaMention,
@@ -732,6 +733,12 @@ export const ChannelPane = React.memo(function ChannelPane({
                 ref={composerWrapperRef}
               >
                 <ComposerUploadProgressOverlay />
+                <ChannelAgentDraftPreview
+                  agents={activityAgents}
+                  channelId={activeChannel?.id ?? null}
+                  profiles={profiles}
+                  workingBotPubkeys={composerWorkingBotPubkeys}
+                />
                 <div
                   className={cn(
                     "composer-dock composer-overlay-corner-masks relative pointer-events-auto",
