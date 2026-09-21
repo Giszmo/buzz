@@ -128,17 +128,16 @@ test.describe("agent draft streaming above the composer", () => {
   }) => {
     await startWorkingTurn(page);
 
-    // Reasoning alone already opens the card — collapsed, and honest about
-    // what it is: the agent is thinking, not writing.
+    // Reasoning opens nothing: the card exists for the reply, and reasoning
+    // never reaches this surface even for the agent's own owner.
     await seedObserverEvents(page, [
       chunkEvent(1, "agent_thought_chunk", THOUGHT_TEXT),
     ]);
     const card = page.getByTestId("agent-draft-preview");
-    await expect(card).toBeVisible();
-    await expect(card.getByTestId("agent-draft-preview-status")).toContainText(
-      "is thinking",
-    );
-    await expect(card.getByTestId("agent-draft-preview-text")).toHaveCount(0);
+    await expect(
+      page.getByTestId("bot-activity-composer-trigger"),
+    ).toBeVisible();
+    await expect(card).toHaveCount(0);
 
     await seedObserverEvents(page, [
       chunkEvent(2, "agent_message_chunk", REPLY_TEXT),
@@ -153,16 +152,8 @@ test.describe("agent draft streaming above the composer", () => {
       REPLY_TEXT,
     );
 
-    // Reasoning is present but collapsed to a single line until asked for.
-    const thought = card.getByTestId("agent-draft-preview-thought");
-    await expect(thought).toHaveAttribute("data-collapsed", "true");
-    await card.getByTestId("agent-draft-preview-thought-toggle").click();
-    await expect(
-      card.getByTestId("agent-draft-preview-thought"),
-    ).not.toHaveAttribute("data-collapsed", "true");
-    await expect(card.getByTestId("agent-draft-preview-thought")).toContainText(
-      THOUGHT_TEXT,
-    );
+    // The reasoning seeded above is nowhere on the card, in any form.
+    await expect(card).not.toContainText(THOUGHT_TEXT);
 
     await page.screenshot({
       animations: "disabled",
@@ -197,15 +188,21 @@ test.describe("agent draft streaming above the composer", () => {
       { channelName: "agents", kind: KIND_AGENT_DRAFT_PREVIEW },
     );
 
+    // A frame claiming to carry reasoning is refused by the reader, so a
+    // harness that regressed — or a channel member forging one by hand —
+    // cannot put reasoning on this surface.
     await emitChannelDraft(page, {
       part: "thought",
       seq: 1,
       text: THOUGHT_TEXT,
     });
+    await expect(page.getByTestId("agent-draft-preview")).toHaveCount(0);
+
     await emitChannelDraft(page, { part: "reply", seq: 1, text: "The frames" });
 
     const card = page.getByTestId("agent-draft-preview");
     await expect(card).toBeVisible();
+    await expect(card).not.toContainText(THOUGHT_TEXT);
     // No observer frames were seeded: this text can only have come from the
     // plaintext channel-scoped preview every member receives.
     await expect(card).toHaveAttribute("data-draft-source", "channel");
@@ -280,9 +277,10 @@ test.describe("agent draft streaming above the composer", () => {
     // The switch that hid the surface is still reachable, so the reader is
     // never stranded without a way back.
     await expect(hideToggle).toHaveAttribute("aria-checked", "true");
+    // There is no reasoning switch to offer: reasoning never reaches here.
     await expect(
       page.getByTestId("bot-activity-toggle-draft-thoughts"),
-    ).toBeDisabled();
+    ).toHaveCount(0);
     await hideToggle.click({ force: true });
     await expect(page.getByTestId("agent-draft-preview")).toBeVisible();
   });

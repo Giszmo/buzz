@@ -3,23 +3,19 @@ import * as React from "react";
 /**
  * Device-level preferences for the live agent draft shown above the composer.
  *
- * Two independent switches:
+ * One switch: render the reply as the agent writes it. On by default — the
+ * text is already going to reach every member of the channel, just a minute
+ * later, so seeing it form hides nothing. Readers who find a moving draft
+ * distracting switch it off.
  *
- * - **preview** — render the reply as the agent writes it. On by default:
- *   the text is already going to reach every member of the channel, just a
- *   minute later, so seeing it form hides nothing. Readers who find a moving
- *   draft distracting switch it off.
- * - **thoughts** — also render the agent's reasoning for that turn. On by
- *   default but collapsed to one line: knowing the agent started reasoning is
- *   useful at a glance, while the full text is several screens of
- *   self-correction and is expanded deliberately.
+ * There is deliberately no reasoning switch: reasoning never reaches this
+ * surface, so no reader preference could expose it.
  *
- * Both are stored in localStorage and shared across every channel, like the
- * other transcript preferences. They are UI preferences, not community-scoped
- * data, so they intentionally survive a community switch.
+ * Stored in localStorage and shared across every channel, like the other
+ * transcript preferences. It is a UI preference, not community-scoped data, so
+ * it intentionally survives a community switch.
  */
 const PREVIEW_STORAGE_KEY = "buzz:agent-draft-preview";
-const THOUGHTS_STORAGE_KEY = "buzz:agent-draft-thoughts";
 
 const listeners = new Set<() => void>();
 
@@ -48,7 +44,6 @@ function writeStoredFlag(key: string, enabled: boolean): void {
 }
 
 let previewEnabled = readStoredFlag(PREVIEW_STORAGE_KEY, true);
-let thoughtsEnabled = readStoredFlag(THOUGHTS_STORAGE_KEY, true);
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
@@ -71,25 +66,10 @@ function getPreviewServerSnapshot(): boolean {
   return true;
 }
 
-function getThoughtsSnapshot(): boolean {
-  return thoughtsEnabled;
-}
-
-function getThoughtsServerSnapshot(): boolean {
-  return true;
-}
-
 /** Update "show the reply as it is written" and notify subscribers. */
 export function setAgentDraftPreviewEnabled(enabled: boolean): void {
   previewEnabled = enabled;
   writeStoredFlag(PREVIEW_STORAGE_KEY, enabled);
-  notify();
-}
-
-/** Update "show the agent's reasoning" and notify subscribers. */
-export function setAgentDraftThoughtsEnabled(enabled: boolean): void {
-  thoughtsEnabled = enabled;
-  writeStoredFlag(THOUGHTS_STORAGE_KEY, enabled);
   notify();
 }
 
@@ -99,14 +79,5 @@ export function useAgentDraftPreviewEnabled(): boolean {
     subscribe,
     getPreviewSnapshot,
     getPreviewServerSnapshot,
-  );
-}
-
-/** Whether the agent's reasoning should be rendered alongside the reply. */
-export function useAgentDraftThoughtsEnabled(): boolean {
-  return React.useSyncExternalStore(
-    subscribe,
-    getThoughtsSnapshot,
-    getThoughtsServerSnapshot,
   );
 }

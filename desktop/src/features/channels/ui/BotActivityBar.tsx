@@ -4,9 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useAgentTranscript } from "@/features/agents/ui/useObserverEvents";
 import {
   setAgentDraftPreviewEnabled,
-  setAgentDraftThoughtsEnabled,
   useAgentDraftPreviewEnabled,
-  useAgentDraftThoughtsEnabled,
 } from "@/features/agents/ui/agentDraftPreviewPreference";
 import {
   getActivityHeadline,
@@ -52,7 +50,6 @@ export function BotActivityComposerAction({
 }: BotActivityBarProps) {
   const [open, setOpen] = React.useState(false);
   const draftPreviewEnabled = useAgentDraftPreviewEnabled();
-  const draftThoughtsEnabled = useAgentDraftThoughtsEnabled();
   const hoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -294,20 +291,6 @@ export function BotActivityComposerAction({
                 : "Show replies above the composer as agents write them."
             }
           />
-          <DraftPreferenceRow
-            checked={draftThoughtsEnabled}
-            disabled={!draftPreviewEnabled}
-            label="Show thoughts"
-            onToggle={() => setAgentDraftThoughtsEnabled(!draftThoughtsEnabled)}
-            testId="bot-activity-toggle-draft-thoughts"
-            title={
-              draftPreviewEnabled
-                ? draftThoughtsEnabled
-                  ? "Stop showing the agent's reasoning."
-                  : "Show a collapsed line of the agent's reasoning while it writes."
-                : "Turn in-progress replies back on first."
-            }
-          />
         </div>
       </PopoverContent>
     </Popover>
@@ -316,14 +299,12 @@ export function BotActivityComposerAction({
 
 function DraftPreferenceRow({
   checked,
-  disabled = false,
   label,
   onToggle,
   testId,
   title,
 }: {
   checked: boolean;
-  disabled?: boolean;
   label: string;
   onToggle: () => void;
   testId: string;
@@ -332,14 +313,8 @@ function DraftPreferenceRow({
   return (
     <button
       aria-checked={checked}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
-        disabled
-          ? "cursor-not-allowed text-muted-foreground/60"
-          : "text-foreground hover:bg-accent hover:text-accent-foreground",
-      )}
+      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       data-testid={testId}
-      disabled={disabled}
       onClick={onToggle}
       role="switch"
       title={title}
@@ -348,7 +323,7 @@ function DraftPreferenceRow({
       <span className="min-w-0 flex-1 truncate">{label}</span>
       <Switch
         aria-hidden="true"
-        checked={checked && !disabled}
+        checked={checked}
         className="pointer-events-none shrink-0"
         tabIndex={-1}
       />

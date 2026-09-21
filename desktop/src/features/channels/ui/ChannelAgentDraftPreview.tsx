@@ -1,14 +1,10 @@
 import * as React from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 
 import {
   useChannelAgentDraft,
   useChannelDraftPreviews,
 } from "@/features/agents/channelDraftPreviewStore";
-import {
-  useAgentDraftPreviewEnabled,
-  useAgentDraftThoughtsEnabled,
-} from "@/features/agents/ui/agentDraftPreviewPreference";
+import { useAgentDraftPreviewEnabled } from "@/features/agents/ui/agentDraftPreviewPreference";
 import { buildAgentDraftPresentation } from "@/features/agents/ui/agentDraftPreviewPresentation";
 import { selectAgentDraftStream } from "@/features/agents/ui/agentDraftStream";
 import { useAgentTranscript } from "@/features/agents/ui/useObserverEvents";
@@ -98,7 +94,6 @@ function AgentDraftCard({
 }) {
   const transcript = useAgentTranscript(true, agent.pubkey);
   const previewEnabled = useAgentDraftPreviewEnabled();
-  const showThoughts = useAgentDraftThoughtsEnabled();
   const channelDraft = useChannelAgentDraft(channelId, agent.pubkey);
   const ownerDraft = React.useMemo(
     () => selectAgentDraftStream(transcript, channelId),
@@ -114,9 +109,8 @@ function AgentDraftCard({
         agentName: agent.name,
         draft,
         previewEnabled,
-        showThoughts,
       }),
-    [agent.name, draft, previewEnabled, showThoughts],
+    [agent.name, draft, previewEnabled],
   );
 
   if (!presentation) {
@@ -148,16 +142,6 @@ function AgentDraftCard({
         </p>
       </div>
 
-      {presentation.thought !== null ? (
-        // Keyed on the turn so each new turn starts collapsed again: an
-        // expansion is a choice about one stretch of reasoning, not a
-        // standing preference.
-        <ThoughtBlock
-          key={`thought:${draft?.turnKey}`}
-          text={presentation.thought}
-        />
-      ) : null}
-
       {presentation.text !== "" ? (
         <StreamingText
           className="mt-1.5 max-h-40 text-sm"
@@ -166,51 +150,6 @@ function AgentDraftCard({
           text={presentation.text}
         />
       ) : null}
-    </div>
-  );
-}
-
-/**
- * Reasoning, collapsed to its first line until the reader asks for the rest.
- *
- * Collapsed is the useful default: the point is seeing *that* the agent
- * started thinking, which is one line's worth of information. The full text
- * is several screens of self-correction and is opened deliberately.
- */
-function ThoughtBlock({ text }: { text: string }) {
-  const [expanded, setExpanded] = React.useState(false);
-
-  return (
-    <div className="mt-1.5 flex items-start gap-1">
-      <button
-        aria-expanded={expanded}
-        aria-label={expanded ? "Collapse reasoning" : "Expand reasoning"}
-        className="mt-px shrink-0 rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-        data-testid="agent-draft-preview-thought-toggle"
-        onClick={() => setExpanded((current) => !current)}
-        type="button"
-      >
-        {expanded ? (
-          <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
-        ) : (
-          <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" />
-        )}
-      </button>
-      {expanded ? (
-        <StreamingText
-          className="max-h-32 border-l-2 border-border/70 pl-2 text-xs leading-4 text-muted-foreground/80"
-          testId="agent-draft-preview-thought"
-          text={text}
-        />
-      ) : (
-        <p
-          className="min-w-0 flex-1 truncate text-xs leading-4 text-muted-foreground/80"
-          data-collapsed="true"
-          data-testid="agent-draft-preview-thought"
-        >
-          {text}
-        </p>
-      )}
     </div>
   );
 }

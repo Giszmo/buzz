@@ -7,15 +7,19 @@
 //! accumulates the text per turn and republishes it as a plaintext ephemeral
 //! event `h`-tagged to the channel, so every member watches the reply form.
 //!
-//! Two properties keep that affordable and honest:
+//! Three properties keep that affordable and honest:
 //!
+//! - **The reply only, never the reasoning.** `agent_thought_chunk` is
+//!   dropped here and has no representation in the published event: reasoning
+//!   is working text that can quote a secret the finished reply would never
+//!   carry, and this carrier is readable by every channel member. Owners keep
+//!   the encrypted observer path for it.
 //! - **Cumulative, not delta.** Ephemeral frames are droppable, so each frame
 //!   repeats the text so far (clamped to its tail) and carries a `seq`. A
 //!   reader that missed a frame is correct again on the next one.
 //! - **Opt-in once, at the harness.** Nothing is published unless the
-//!   operator turns it on. Beyond that, which parts a reader sees — reply,
-//!   reasoning, neither — is a client-side choice, so both parts go on the
-//!   wire and the client decides what to render.
+//!   operator turns it on. Whether a reader renders the preview at all is
+//!   then their own client-side choice.
 
 use std::collections::VecDeque;
 
@@ -34,9 +38,8 @@ const DRAFT_PUBLISH_TICK: std::time::Duration = std::time::Duration::from_secs(1
 
 /// Frames published per tick, across all turns.
 ///
-/// A pool runs several turns at once, each with a reply and a reasoning part,
-/// so an unbounded tick could emit a dozen events per second and trip the
-/// relay's admission budget — which would cost the typing indicators and
+/// A pool runs several turns at once, so an unbounded tick could emit a
+/// frame per turn per second and trip the relay's admission budget — which would cost the typing indicators and
 /// observer frames sharing that socket. Turns are served round-robin, so a
 /// busy pool slows every preview down evenly instead of starving the turns at
 /// the back.
@@ -107,7 +110,6 @@ struct DraftTurn {
     turn_id: String,
     triggering_event_id: Option<String>,
     reply: DraftPart,
-    thought: DraftPart,
     /// Set by `turn_completed`; the turn emits its closing frames on the next
     /// tick and is then forgotten.
     finished: bool,
@@ -117,7 +119,6 @@ impl DraftTurn {
     fn part_mut(&mut self, part: AgentDraftPart) -> &mut DraftPart {
         match part {
             AgentDraftPart::Reply => &mut self.reply,
-            AgentDraftPart::Thought => &mut self.thought,
         }
     }
 
@@ -166,7 +167,6 @@ impl DraftPreviewState {
             turn_id: turn_id.to_string(),
             triggering_event_id: None,
             reply: DraftPart::default(),
-            thought: DraftPart::default(),
             finished: false,
         });
         self.turns.len() - 1
@@ -213,9 +213,9 @@ impl DraftPreviewState {
                 };
                 let part = match key.update_type.as_str() {
                     "agent_message_chunk" => AgentDraftPart::Reply,
-                    "agent_thought_chunk" => AgentDraftPart::Thought,
-                    // user_message_chunk is the prompt echoed back, not the
-                    // agent writing.
+                    // agent_thought_chunk is deliberately absent: reasoning
+                    // stays on the owner-scoped encrypted path. user_message_chunk
+                    // is the prompt echoed back, not the agent writing.
                     _ => return,
                 };
                 let index = self.ensure_turn(channel_id, turn_id);
@@ -246,7 +246,7 @@ impl DraftPreviewState {
             // has been emitted, so a closing frame can never be lost to the
             // budget.
             let mut deferred = false;
-            for part in [AgentDraftPart::Reply, AgentDraftPart::Thought] {
+            for part in [AgentDraftPart::Reply] {
                 // A part that never produced text has no preview on screen to
                 // update or clear, so it stays silent.
                 let owes_frame = if turn.finished {
@@ -444,23 +444,25 @@ mod tests {
     }
 
     #[test]
-    fn reasoning_rides_its_own_part_so_a_reader_can_hide_it() {
+    fn reasoning_never_reaches_the_channel() {
         let mut state = DraftPreviewState::default();
-        state.ingest(&chunk("turn-1", "agent_thought_chunk", "thinking"));
+        state.ingest(&chunk("turn-1", "agent_thought_chunk", "the API key is hunter2"));
         state.ingest(&chunk("turn-1", "agent_message_chunk", "writing"));
 
         let frames = state.next_frames();
-        assert_eq!(frames.len(), 2);
-        let reply = frames
-            .iter()
-            .find(|frame| frame.part == AgentDraftPart::Reply)
-            .expect("reply frame");
-        let thought = frames
-            .iter()
-            .find(|frame| frame.part == AgentDraftPart::Thought)
-            .expect("thought frame");
-        assert_eq!(reply.text, "writing");
-        assert_eq!(thought.text, "thinking");
+        assert_eq!(frames.len(), 1, "only the reply is publishable");
+        assert_eq!(frames[0].part, AgentDraftPart::Reply);
+        assert_eq!(frames[0].text, "writing");
+    }
+
+    #[test]
+    fn a_turn_that_only_reasons_publishes_nothing() {
+        let mut state = DraftPreviewState::default();
+        state.ingest(&chunk("turn-1", "agent_thought_chunk", "thinking out loud"));
+        assert!(
+            state.next_frames().is_empty(),
+            "reasoning alone must not open a preview"
+        );
     }
 
     #[test]
@@ -517,16 +519,18 @@ mod tests {
     #[test]
     fn concurrent_turns_are_served_round_robin_within_the_budget() {
         let mut state = DraftPreviewState::default();
-        // Six dirty parts across three turns; the budget is four frames.
-        for turn in ["turn-1", "turn-2", "turn-3"] {
+        // Six dirty turns, one reply part each; the budget is four frames.
+        let turns = [
+            "turn-1", "turn-2", "turn-3", "turn-4", "turn-5", "turn-6",
+        ];
+        for turn in turns {
             state.ingest(&chunk(turn, "agent_message_chunk", "reply"));
-            state.ingest(&chunk(turn, "agent_thought_chunk", "thought"));
         }
 
         let first = state.next_frames();
         assert_eq!(first.len(), DRAFT_MAX_FRAMES_PER_TICK);
         let second = state.next_frames();
-        assert_eq!(second.len(), 2, "the starved turn leads the next tick");
+        assert_eq!(second.len(), 2, "the starved turns lead the next tick");
 
         let mut served: Vec<&str> = first
             .iter()
@@ -535,7 +539,7 @@ mod tests {
             .collect();
         served.sort_unstable();
         served.dedup();
-        assert_eq!(served, vec!["turn-1", "turn-2", "turn-3"]);
+        assert_eq!(served, turns.to_vec());
     }
 
     #[test]

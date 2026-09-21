@@ -77,17 +77,25 @@ test("rejects other kinds and malformed frames", () => {
   assert.equal(parseChannelDraftPreview(noTurn), null);
 });
 
-test("reply and thought accumulate into one stream", () => {
-  let state = apply(EMPTY_DRAFT_PREVIEW_STATE, previewEvent({ text: "Hello" }));
-  state = apply(
-    state,
-    previewEvent({ part: "thought", seq: 1, text: "weighing it" }),
+test("a frame claiming to carry reasoning is not parsed", () => {
+  // The harness never publishes one, but the kind is plaintext and anyone in
+  // the channel can sign an event: the reader rejects the part outright
+  // rather than rendering whatever a frame claims is reasoning.
+  assert.equal(
+    parseChannelDraftPreview(
+      previewEvent({ part: "thought", text: "the deploy key is in env-carol" }),
+    ),
+    null,
+  );
+
+  const state = apply(
+    EMPTY_DRAFT_PREVIEW_STATE,
+    previewEvent({ text: "Hello" }),
   );
 
   assert.deepEqual(selectChannelDraftStream(state, CHANNEL, AGENT), {
     turnKey: "turn-1",
     text: "Hello",
-    thought: "weighing it",
   });
 });
 

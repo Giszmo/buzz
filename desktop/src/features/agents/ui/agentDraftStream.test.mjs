@@ -59,7 +59,6 @@ test("returns the coalesced assistant text for the newest turn", () => {
   assert.deepEqual(draft, {
     turnKey: "turn-1",
     text: "Half a sent",
-    thought: "weighing options",
   });
 });
 
@@ -122,7 +121,7 @@ test("skips trailing items with no turn identity rather than hiding the draft", 
   assert.equal(draft?.text, "still writing");
 });
 
-test("returns null when the turn has produced neither text nor reasoning", () => {
+test("returns null when the turn has produced no reply text", () => {
   assert.equal(selectAgentDraftStream([lifecycle()], CHANNEL), null);
   assert.equal(
     selectAgentDraftStream([message("   "), thought("  ")], CHANNEL),
@@ -134,8 +133,13 @@ test("returns null for an empty transcript", () => {
   assert.equal(selectAgentDraftStream([], CHANNEL), null);
 });
 
-test("reports a thought-only turn with empty text", () => {
-  const draft = selectAgentDraftStream([thought("still reasoning")], CHANNEL);
-  assert.equal(draft?.text, "");
-  assert.equal(draft?.thought, "still reasoning");
+test("a thought-only turn produces no draft at all", () => {
+  // Reasoning can quote material the reply never will, and this stream feeds
+  // a surface in the channel timeline. It must not carry reasoning, and must
+  // not open a card on reasoning alone.
+  const draft = selectAgentDraftStream(
+    [thought("the deploy key is in env-carol")],
+    CHANNEL,
+  );
+  assert.equal(draft, null);
 });

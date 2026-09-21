@@ -6,9 +6,12 @@
 //! observer stream ([`crate::observer`]) cannot show a teammate what someone
 //! else's agent is writing.
 //!
-//! Because the text is public and unfinished, publishing is opt-in per agent
-//! and the reply and reasoning halves are separate opt-ins. Previews are
-//! ephemeral (never stored) and are superseded by the finished `kind:9`.
+//! Because the text is public and unfinished, publishing is opt-in at the
+//! harness. Only the reply is ever carried here: an agent's reasoning is
+//! working text that can quote a secret the finished reply would not, so it
+//! stays on the owner-scoped encrypted observer path and has no `part` value
+//! in this kind. Previews are ephemeral (never stored) and are superseded by
+//! the finished `kind:9`.
 
 /// Tag naming the turn a preview belongs to. Stable for one prompt turn, so a
 /// reader can tell a new turn from a continuation of the current one.
@@ -25,10 +28,9 @@ pub const DRAFT_STATUS_TAG: &str = "status";
 /// Tag set to `"1"` when the text was trimmed to [`DRAFT_MAX_TEXT_BYTES`].
 pub const DRAFT_TRUNCATED_TAG: &str = "truncated";
 
-/// `part` value for the reply text the agent will publish.
+/// `part` value for the reply text the agent will publish. The only value
+/// this kind defines — reasoning is deliberately not publishable here.
 pub const DRAFT_PART_REPLY: &str = "reply";
-/// `part` value for the agent's reasoning.
-pub const DRAFT_PART_THOUGHT: &str = "thought";
 
 /// `status` value while the turn is still running.
 pub const DRAFT_STATUS_WRITING: &str = "writing";

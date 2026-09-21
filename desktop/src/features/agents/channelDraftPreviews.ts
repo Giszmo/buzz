@@ -9,9 +9,10 @@ import { normalizePubkey } from "@/shared/lib/pubkey";
  * The owner-scoped observer stream can only show an agent's own owner what it
  * is writing. These frames are plaintext and `h`-tagged to the channel, so a
  * teammate watching someone else's agent sees the same forming reply. The
- * harness publishes them only when its operator opts in, and reasoning is a
- * second opt-in on top — so most agents emit nothing here and the card falls
- * back to the owner's decrypted transcript.
+ * harness publishes them only when its operator opts in — so most agents emit
+ * nothing here and the card falls back to the owner's decrypted transcript.
+ * Only the reply is ever carried: the harness drops thought chunks before they
+ * reach this kind, and a frame claiming any other `part` is not parsed.
  *
  * Frames carry the cumulative text, not a delta: dropping one loses a beat of
  * animation, never the text.
@@ -25,14 +26,13 @@ const PART_TAG = "part";
 const SEQ_TAG = "seq";
 const STATUS_TAG = "status";
 const PART_REPLY = "reply";
-const PART_THOUGHT = "thought";
 const STATUS_DONE = "done";
 
 export type ChannelDraftPreviewFrame = {
   agentPubkey: string;
   channelId: string;
   turnId: string;
-  part: "reply" | "thought";
+  part: typeof PART_REPLY;
   seq: number;
   text: string;
   /** The turn is over; the preview should clear rather than age out. */
@@ -51,7 +51,6 @@ type DraftEntry = {
   channelId: string;
   turnId: string;
   reply: DraftPart | null;
-  thought: DraftPart | null;
   expiresAt: number;
 };
 
@@ -88,12 +87,7 @@ export function parseChannelDraftPreview(
   const turnId = tagValue(event.tags, TURN_TAG);
   const part = tagValue(event.tags, PART_TAG);
   const seq = Number.parseInt(tagValue(event.tags, SEQ_TAG) ?? "", 10);
-  if (
-    !channelId ||
-    !turnId ||
-    (part !== PART_REPLY && part !== PART_THOUGHT) ||
-    !Number.isFinite(seq)
-  ) {
+  if (!channelId || !turnId || part !== PART_REPLY || !Number.isFinite(seq)) {
     return null;
   }
 
@@ -144,11 +138,10 @@ export function applyChannelDraftPreview(
         channelId: frame.channelId,
         turnId: frame.turnId,
         reply: null,
-        thought: null,
         expiresAt: 0,
       };
 
-  const current = frame.part === PART_REPLY ? base.reply : base.thought;
+  const current = base.reply;
   if (current && current.seq >= frame.seq) {
     return state;
   }
@@ -160,9 +153,7 @@ export function applyChannelDraftPreview(
       frame.timestampMs + DRAFT_PREVIEW_TTL_MS,
       nowMs,
     ),
-    ...(frame.part === PART_REPLY
-      ? { reply: { seq: frame.seq, text: frame.text } }
-      : { thought: { seq: frame.seq, text: frame.text } }),
+    reply: { seq: frame.seq, text: frame.text },
   };
 
   return { ...state, [key]: updated };
@@ -204,10 +195,9 @@ export function selectChannelDraftStream(
   }
 
   const text = entry.reply?.text.trim() ?? "";
-  const thought = entry.thought?.text.trim() ?? "";
-  if (text === "" && thought === "") {
+  if (text === "") {
     return null;
   }
 
-  return { turnKey: entry.turnId, text, thought };
+  return { turnKey: entry.turnId, text };
 }

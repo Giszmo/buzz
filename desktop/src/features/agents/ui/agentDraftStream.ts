@@ -4,20 +4,22 @@ import type { TranscriptItem } from "./agentSessionTypes";
  * The reply an agent is composing right now, assembled from the observer
  * transcript.
  *
- * The ACP bridge already streams `agent_message_chunk` and
- * `agent_thought_chunk` to the agent's owner, and `buildTranscriptState`
- * already coalesces those chunks into one `message` item and one `thought`
- * item per turn. This selector picks the pair belonging to the turn that is
+ * The ACP bridge already streams `agent_message_chunk` to the agent's owner,
+ * and `buildTranscriptState` already coalesces those chunks into one `message`
+ * item per turn. This selector picks the one belonging to the turn that is
  * still running, so a channel surface can render the reply as it forms
  * instead of waiting for the finished kind:9.
+ *
+ * Reasoning is deliberately not part of this shape. Thought chunks can quote
+ * material the finished reply never would, and this stream feeds a surface
+ * sitting in the channel timeline; the Agent Session panel remains the place
+ * an owner reads their own agent's reasoning.
  */
 export type AgentDraftStream = {
   /** Turn the draft belongs to — `turnId`, falling back to `sessionId`. */
   turnKey: string;
   /** Reply text so far. Empty while the agent has only thought or used tools. */
   text: string;
-  /** Reasoning text so far. Empty when the harness emits no thought chunks. */
-  thought: string;
 };
 
 /**
@@ -43,8 +45,8 @@ function scopeToChannel(
  * Select the in-progress reply for the newest turn in `channelId`.
  *
  * Returns `null` when the transcript has nothing for this channel, when the
- * newest turn carries no turn identity, or when that turn has produced neither
- * reply text nor reasoning yet. Callers are expected to gate on an
+ * newest turn carries no turn identity, or when that turn has produced no
+ * reply text yet. Callers are expected to gate on an
  * "agent is working" signal as well — this selector reads a transcript that
  * also retains completed turns, and on its own cannot tell a running turn from
  * the last finished one.
@@ -79,7 +81,6 @@ export function selectAgentDraftStream(
   }
 
   let text = "";
-  let thought = "";
 
   for (const item of scoped) {
     if (turnKeyOf(item) !== turnKey) {
@@ -87,20 +88,16 @@ export function selectAgentDraftStream(
     }
     if (item.type === "message" && item.role === "assistant") {
       text = item.text;
-    } else if (item.type === "thought") {
-      thought = item.text;
     }
   }
 
   const trimmedText = text.trim();
-  const trimmedThought = thought.trim();
-  if (trimmedText === "" && trimmedThought === "") {
+  if (trimmedText === "") {
     return null;
   }
 
   return {
     turnKey,
     text: trimmedText,
-    thought: trimmedThought,
   };
 }

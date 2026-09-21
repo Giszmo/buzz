@@ -501,14 +501,14 @@ pub struct CliArgs {
     #[arg(long, env = "BUZZ_ACP_RELAY_OBSERVER", default_value_t = false)]
     pub relay_observer: bool,
 
-    /// Publish channel-visible previews of the reply and reasoning as the
-    /// agent writes them.
+    /// Publish channel-visible previews of the reply as the agent writes it.
     ///
     /// Unlike `--relay-observer` these frames are plaintext and readable by
     /// every member of the channel, so this is off until an operator turns it
-    /// on. Which parts a reader actually sees is their own client-side
-    /// choice; the harness publishes both. The finished message is unaffected
-    /// either way.
+    /// on. The agent's reasoning is never published here — it can quote
+    /// material the finished reply would not — and readers decide for
+    /// themselves whether to render the preview at all. The finished message
+    /// is unaffected either way.
     #[arg(long, env = "BUZZ_ACP_LIVE_DRAFT", default_value_t = false)]
     pub live_draft: bool,
 

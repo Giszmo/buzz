@@ -5,7 +5,7 @@
 
 use buzz_core::{
     draft_preview::{
-        clamp_draft_text, DRAFT_PART_REPLY, DRAFT_PART_TAG, DRAFT_PART_THOUGHT, DRAFT_SEQ_TAG,
+        clamp_draft_text, DRAFT_PART_REPLY, DRAFT_PART_TAG, DRAFT_SEQ_TAG,
         DRAFT_STATUS_DONE, DRAFT_STATUS_TAG, DRAFT_STATUS_WRITING, DRAFT_TRUNCATED_TAG,
         DRAFT_TURN_TAG,
     },
@@ -328,20 +328,23 @@ pub struct AgentDraftPreview<'a> {
     pub writing: bool,
 }
 
-/// Which half of a turn a draft preview carries.
+/// Which part of a turn a draft preview carries.
+///
+/// Single-variant on purpose: the reasoning an agent produces on the way to a
+/// reply can quote material the finished reply never would, and this event is
+/// readable by every member of the channel. Reasoning reaches its owner
+/// through the encrypted observer frames instead, so there is no variant here
+/// that could put it on a plaintext wire.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentDraftPart {
     /// The reply text the agent will publish.
     Reply,
-    /// The agent's reasoning.
-    Thought,
 }
 
 impl AgentDraftPart {
     fn as_tag_value(self) -> &'static str {
         match self {
             AgentDraftPart::Reply => DRAFT_PART_REPLY,
-            AgentDraftPart::Thought => DRAFT_PART_THOUGHT,
         }
     }
 }
@@ -2599,12 +2602,12 @@ mod tests {
     }
 
     #[test]
-    fn agent_draft_preview_marks_done_and_thought() {
+    fn agent_draft_preview_marks_done() {
         let ev = sign(
             build_agent_draft_preview(&AgentDraftPreview {
                 channel_id: uuid(),
                 turn_id: "turn-1",
-                part: AgentDraftPart::Thought,
+                part: AgentDraftPart::Reply,
                 seq: 0,
                 text: "",
                 triggering_event_id: None,
@@ -2613,7 +2616,7 @@ mod tests {
             .unwrap(),
         );
 
-        assert!(has_tag(&ev, DRAFT_PART_TAG, DRAFT_PART_THOUGHT));
+        assert!(has_tag(&ev, DRAFT_PART_TAG, DRAFT_PART_REPLY));
         assert!(has_tag(&ev, DRAFT_STATUS_TAG, DRAFT_STATUS_DONE));
         assert!(tag_values(&ev, "e").is_empty());
     }
