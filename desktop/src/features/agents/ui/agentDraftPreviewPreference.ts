@@ -5,11 +5,14 @@ import * as React from "react";
  *
  * Two independent switches:
  *
- * - **preview** — render the reply as the agent writes it. On by default;
- *   this is the surface itself.
- * - **thoughts** — also render the agent's reasoning for that turn. Off by
- *   default: reasoning is high-volume, frequently self-correcting, and only
- *   some readers want it, so it is strictly opt-in.
+ * - **preview** — render the reply as the agent writes it. On by default:
+ *   the text is already going to reach every member of the channel, just a
+ *   minute later, so seeing it form hides nothing. Readers who find a moving
+ *   draft distracting switch it off.
+ * - **thoughts** — also render the agent's reasoning for that turn. On by
+ *   default but collapsed to one line: knowing the agent started reasoning is
+ *   useful at a glance, while the full text is several screens of
+ *   self-correction and is expanded deliberately.
  *
  * Both are stored in localStorage and shared across every channel, like the
  * other transcript preferences. They are UI preferences, not community-scoped
@@ -45,7 +48,7 @@ function writeStoredFlag(key: string, enabled: boolean): void {
 }
 
 let previewEnabled = readStoredFlag(PREVIEW_STORAGE_KEY, true);
-let thoughtsEnabled = readStoredFlag(THOUGHTS_STORAGE_KEY, false);
+let thoughtsEnabled = readStoredFlag(THOUGHTS_STORAGE_KEY, true);
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
@@ -73,7 +76,7 @@ function getThoughtsSnapshot(): boolean {
 }
 
 function getThoughtsServerSnapshot(): boolean {
-  return false;
+  return true;
 }
 
 /** Update "show the reply as it is written" and notify subscribers. */
@@ -83,7 +86,7 @@ export function setAgentDraftPreviewEnabled(enabled: boolean): void {
   notify();
 }
 
-/** Update "also show the agent's reasoning" and notify subscribers. */
+/** Update "show the agent's reasoning" and notify subscribers. */
 export function setAgentDraftThoughtsEnabled(enabled: boolean): void {
   thoughtsEnabled = enabled;
   writeStoredFlag(THOUGHTS_STORAGE_KEY, enabled);

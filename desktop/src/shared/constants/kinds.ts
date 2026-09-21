@@ -65,6 +65,10 @@ export const KIND_MANAGED_AGENT = 30177;
 export const KIND_TEAM_CATALOG = 30178;
 export const KIND_USER_STATUS = 30315;
 export const KIND_AGENT_OBSERVER_FRAME = 24200;
+// Ephemeral, plaintext, `h`-tagged to a channel: the reply an agent is
+// composing right now, published by an opted-in harness so every member of the
+// channel sees it form. Mirrors buzz-core's KIND_AGENT_DRAFT_PREVIEW.
+export const KIND_AGENT_DRAFT_PREVIEW = 24201;
 export const KIND_AGENT_TURN_METRIC = 44200;
 export const KIND_EVENT_REMINDER = 30300;
 export const KIND_REPO_ANNOUNCEMENT = 30617;

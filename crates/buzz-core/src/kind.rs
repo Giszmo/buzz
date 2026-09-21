@@ -467,6 +467,12 @@ pub const KIND_PAIRING: u32 = 24134;
 pub const KIND_TYPING_INDICATOR: u32 = 20002;
 /// Ephemeral: owner-scoped encrypted agent observer telemetry and control frame.
 pub const KIND_AGENT_OBSERVER_FRAME: u32 = 24200;
+/// Ephemeral: channel-scoped plaintext preview of the reply an agent is
+/// composing, `h`-tagged to the channel so every member sees it form. Opt-in
+/// per agent (the harness publishes nothing unless configured), superseded by
+/// the finished `kind:9`. Distinct from [`KIND_AGENT_OBSERVER_FRAME`], which
+/// is encrypted to the agent's owner and carries the full ACP transcript.
+pub const KIND_AGENT_DRAFT_PREVIEW: u32 = 24201;
 /// Ephemeral: huddle emoji reaction burst. Channel-scoped to the ephemeral
 /// huddle channel with an `h` tag; never stored in the timeline.
 pub const KIND_HUDDLE_REACTION: u32 = 24810;
@@ -700,6 +706,7 @@ pub const ALL_KINDS: &[u32] = &[
     KIND_BLOSSOM_AUTH,
     KIND_PAIRING,
     KIND_AGENT_OBSERVER_FRAME,
+    KIND_AGENT_DRAFT_PREVIEW,
     KIND_HTTP_AUTH,
     KIND_STREAM_MESSAGE,
     KIND_STREAM_MESSAGE_V2,

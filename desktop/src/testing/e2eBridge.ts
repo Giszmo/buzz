@@ -1322,6 +1322,17 @@ declare global {
       pubkey?: string;
       threadHeadId?: string;
     }) => RelayEvent;
+    /** Emit a channel-visible agent draft preview (kind 24201). */
+    __BUZZ_E2E_EMIT_MOCK_AGENT_DRAFT__?: (input: {
+      channelName: string;
+      pubkey: string;
+      turnId: string;
+      part: "reply" | "thought";
+      seq: number;
+      text: string;
+      done?: boolean;
+      createdAt?: number;
+    }) => RelayEvent;
     __BUZZ_E2E_INVOKE_MOCK_COMMAND__?: (
       command: string,
       payload?: Record<string, unknown>,
@@ -11634,6 +11645,42 @@ export function maybeInstallE2eTauriMocks() {
       threadHeadId,
       createdAt,
     );
+  };
+  window.__BUZZ_E2E_EMIT_MOCK_AGENT_DRAFT__ = ({
+    channelName,
+    createdAt,
+    done = false,
+    part,
+    pubkey,
+    seq,
+    text,
+    turnId,
+  }) => {
+    const channel = mockChannels.find(
+      (candidate) => candidate.name === channelName,
+    );
+    if (!channel) {
+      throw new Error(`Mock channel ${channelName} not found.`);
+    }
+
+    const event: RelayEvent = {
+      id: crypto.randomUUID().replace(/-/g, ""),
+      pubkey,
+      created_at: createdAt ?? Math.floor(Date.now() / 1000),
+      kind: 24201,
+      tags: [
+        ["h", channel.id],
+        ["turn", turnId],
+        ["part", part],
+        ["seq", String(seq)],
+        ["status", done ? "done" : "writing"],
+      ],
+      content: text,
+      sig: "mocksig".repeat(20).slice(0, 128),
+    };
+
+    emitMockLiveEvent(channel.id, event);
+    return event;
   };
   window.__BUZZ_E2E_HAS_MOCK_LIVE_SUBSCRIPTION__ = ({ channelName, kind }) => {
     const channel = mockChannels.find(

@@ -284,28 +284,28 @@ export function BotActivityComposerAction({
         </div>
         <div className="mt-1 border-t border-border/60 pt-1">
           <DraftPreferenceRow
-            checked={draftPreviewEnabled}
-            label="Show reply as it's written"
+            checked={!draftPreviewEnabled}
+            label="Hide in-progress replies"
             onToggle={() => setAgentDraftPreviewEnabled(!draftPreviewEnabled)}
             testId="bot-activity-toggle-draft-preview"
             title={
               draftPreviewEnabled
-                ? "Stop streaming the forming reply above the composer."
-                : "Stream the forming reply above the composer."
+                ? "Stop showing replies as they are written. The finished message still arrives."
+                : "Show replies above the composer as agents write them."
             }
           />
           <DraftPreferenceRow
             checked={draftThoughtsEnabled}
             disabled={!draftPreviewEnabled}
-            label="Include thoughts"
+            label="Show thoughts"
             onToggle={() => setAgentDraftThoughtsEnabled(!draftThoughtsEnabled)}
             testId="bot-activity-toggle-draft-thoughts"
             title={
               draftPreviewEnabled
                 ? draftThoughtsEnabled
                   ? "Stop showing the agent's reasoning."
-                  : "Also show the agent's reasoning while it writes."
-                : "Turn on the streaming reply first."
+                  : "Show a collapsed line of the agent's reasoning while it writes."
+                : "Turn in-progress replies back on first."
             }
           />
         </div>

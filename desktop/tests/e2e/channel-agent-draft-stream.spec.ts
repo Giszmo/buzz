@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { KIND_TYPING_INDICATOR } from "../../src/shared/constants/kinds";
+import {
+  KIND_AGENT_DRAFT_PREVIEW,
+  KIND_TYPING_INDICATOR,
+} from "../../src/shared/constants/kinds";
 import { TEST_IDENTITIES, installMockBridge } from "../helpers/bridge";
 
 const AGENTS_CHANNEL_ID = "94a444a4-c0a3-5966-ab05-530c6ddc2301";
@@ -67,6 +70,28 @@ async function seedObserverEvents(page: Page, events: SeededObserverEvent[]) {
   );
 }
 
+async function emitChannelDraft(
+  page: Page,
+  input: {
+    part: "reply" | "thought";
+    seq: number;
+    text: string;
+    done?: boolean;
+  },
+) {
+  await page.evaluate(
+    ({ agentPubkey, turnId, draft }) => {
+      window.__BUZZ_E2E_EMIT_MOCK_AGENT_DRAFT__?.({
+        channelName: "agents",
+        pubkey: agentPubkey,
+        turnId,
+        ...draft,
+      });
+    },
+    { agentPubkey: AGENT_PUBKEY, turnId: TURN_ID, draft: input },
+  );
+}
+
 /**
  * Put the agent into the channel's "working" set the same way
  * `channels.spec.ts` does — a typing indicator is mirrored into the unified
@@ -98,52 +123,50 @@ test.describe("agent draft streaming above the composer", () => {
     await installMockBridge(page);
   });
 
-  test("streams the forming reply and keeps thoughts opt-in", async ({
+  test("streams the forming reply from the owner's observer frames", async ({
     page,
   }) => {
     await startWorkingTurn(page);
 
-    // A turn that has only reasoned so far renders nothing: reasoning is
-    // opt-in, and an empty card would claim the agent is writing.
+    // Reasoning alone already opens the card — collapsed, and honest about
+    // what it is: the agent is thinking, not writing.
     await seedObserverEvents(page, [
       chunkEvent(1, "agent_thought_chunk", THOUGHT_TEXT),
     ]);
-    await expect(page.getByTestId("agent-draft-preview")).toHaveCount(0);
+    const card = page.getByTestId("agent-draft-preview");
+    await expect(card).toBeVisible();
+    await expect(card.getByTestId("agent-draft-preview-status")).toContainText(
+      "is thinking",
+    );
+    await expect(card.getByTestId("agent-draft-preview-text")).toHaveCount(0);
 
     await seedObserverEvents(page, [
       chunkEvent(2, "agent_message_chunk", REPLY_TEXT),
     ]);
 
-    const card = page.getByTestId("agent-draft-preview");
     await expect(card).toBeVisible();
+    await expect(card).toHaveAttribute("data-draft-source", "owner");
     await expect(card.getByTestId("agent-draft-preview-status")).toContainText(
       "is writing",
     );
     await expect(card.getByTestId("agent-draft-preview-text")).toContainText(
       REPLY_TEXT,
     );
-    // Thoughts stay off until asked for, even though the chunks arrived.
-    await expect(card.getByTestId("agent-draft-preview-thought")).toHaveCount(
-      0,
-    );
-    await expect(card).not.toContainText(THOUGHT_TEXT);
 
-    await page.screenshot({
-      path: `${SHOTS}/draft-reply-only.png`,
-    });
-
-    const thoughtsToggle = card.getByTestId(
-      "agent-draft-preview-toggle-thoughts",
-    );
-    await expect(thoughtsToggle).toHaveAttribute("aria-pressed", "false");
-    await thoughtsToggle.click();
-    await expect(thoughtsToggle).toHaveAttribute("aria-pressed", "true");
+    // Reasoning is present but collapsed to a single line until asked for.
+    const thought = card.getByTestId("agent-draft-preview-thought");
+    await expect(thought).toHaveAttribute("data-collapsed", "true");
+    await card.getByTestId("agent-draft-preview-thought-toggle").click();
+    await expect(
+      card.getByTestId("agent-draft-preview-thought"),
+    ).not.toHaveAttribute("data-collapsed", "true");
     await expect(card.getByTestId("agent-draft-preview-thought")).toContainText(
       THOUGHT_TEXT,
     );
 
     await page.screenshot({
-      path: `${SHOTS}/draft-reply-with-thoughts.png`,
+      animations: "disabled",
+      path: `${SHOTS}/draft-owner-stream.png`,
     });
 
     // Later chunks replace the coalesced text in place — one forming message,
@@ -159,6 +182,64 @@ test.describe("agent draft streaming above the composer", () => {
     await expect(card.getByTestId("agent-draft-preview-text")).toContainText(
       "A client change is enough for the owner.",
     );
+  });
+
+  test("renders a channel preview published by an agent nobody here owns", async ({
+    page,
+  }) => {
+    await startWorkingTurn(page);
+    await page.waitForFunction(
+      ({ channelName, kind }) =>
+        window.__BUZZ_E2E_HAS_MOCK_LIVE_SUBSCRIPTION__?.({
+          channelName,
+          kind,
+        }) ?? false,
+      { channelName: "agents", kind: KIND_AGENT_DRAFT_PREVIEW },
+    );
+
+    await emitChannelDraft(page, {
+      part: "thought",
+      seq: 1,
+      text: THOUGHT_TEXT,
+    });
+    await emitChannelDraft(page, { part: "reply", seq: 1, text: "The frames" });
+
+    const card = page.getByTestId("agent-draft-preview");
+    await expect(card).toBeVisible();
+    // No observer frames were seeded: this text can only have come from the
+    // plaintext channel-scoped preview every member receives.
+    await expect(card).toHaveAttribute("data-draft-source", "channel");
+    await expect(card.getByTestId("agent-draft-preview-text")).toContainText(
+      "The frames",
+    );
+
+    // Cumulative frames replace the text rather than appending a second row.
+    await emitChannelDraft(page, { part: "reply", seq: 2, text: REPLY_TEXT });
+    await expect(page.getByTestId("agent-draft-preview")).toHaveCount(1);
+    await expect(card.getByTestId("agent-draft-preview-text")).toContainText(
+      REPLY_TEXT,
+    );
+
+    await page.screenshot({
+      animations: "disabled",
+      path: `${SHOTS}/draft-channel-stream.png`,
+    });
+
+    // The draft is a moving preview, not a message: nothing in it is
+    // selectable, clickable, or focusable.
+    await expect(card.getByTestId("agent-draft-preview-text")).toHaveAttribute(
+      "inert",
+      "",
+    );
+
+    // The closing frame clears the card; the finished kind:9 is what remains.
+    await emitChannelDraft(page, {
+      done: true,
+      part: "reply",
+      seq: 3,
+      text: REPLY_TEXT,
+    });
+    await expect(page.getByTestId("agent-draft-preview")).toHaveCount(0);
   });
 
   test("a draft from another channel never leaks into this one", async ({
@@ -180,7 +261,7 @@ test.describe("agent draft streaming above the composer", () => {
     await expect(page.getByTestId("agent-draft-preview")).toHaveCount(0);
   });
 
-  test("the working-agents popover can switch the stream off and back on", async ({
+  test("the working-agents popover can hide the stream and bring it back", async ({
     page,
   }) => {
     await startWorkingTurn(page);
@@ -190,19 +271,19 @@ test.describe("agent draft streaming above the composer", () => {
     await expect(page.getByTestId("agent-draft-preview")).toBeVisible();
 
     await page.getByTestId("bot-activity-composer-trigger").click();
-    const previewToggle = page.getByTestId("bot-activity-toggle-draft-preview");
-    await expect(previewToggle).toBeVisible();
-    await expect(previewToggle).toHaveAttribute("aria-checked", "true");
-    await previewToggle.click({ force: true });
+    const hideToggle = page.getByTestId("bot-activity-toggle-draft-preview");
+    await expect(hideToggle).toBeVisible();
+    await expect(hideToggle).toHaveAttribute("aria-checked", "false");
+    await hideToggle.click({ force: true });
     await expect(page.getByTestId("agent-draft-preview")).toHaveCount(0);
 
     // The switch that hid the surface is still reachable, so the reader is
     // never stranded without a way back.
-    await expect(previewToggle).toHaveAttribute("aria-checked", "false");
+    await expect(hideToggle).toHaveAttribute("aria-checked", "true");
     await expect(
       page.getByTestId("bot-activity-toggle-draft-thoughts"),
     ).toBeDisabled();
-    await previewToggle.click({ force: true });
+    await hideToggle.click({ force: true });
     await expect(page.getByTestId("agent-draft-preview")).toBeVisible();
   });
 });

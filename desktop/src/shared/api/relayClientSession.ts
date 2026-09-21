@@ -7,6 +7,7 @@ import {
 import type { PresenceStatus, RelayEvent } from "@/shared/api/types";
 import {
   KIND_STREAM_MESSAGE,
+  KIND_AGENT_DRAFT_PREVIEW,
   KIND_TYPING_INDICATOR,
   KIND_USER_STATUS,
   CHANNEL_EVENT_KINDS,
@@ -356,6 +357,29 @@ export class RelayClient {
         kinds: [48100, 48101, 48102, 48103],
         "#h": [channelId],
         limit: 100,
+      },
+      onEvent,
+    );
+  }
+
+  /**
+   * Subscribe to channel-visible agent draft previews (kind 24201).
+   *
+   * Live only: a preview is worthless once the turn that produced it has
+   * ended, and the finished message is already in the timeline. The short
+   * lookback covers a subscription that starts mid-turn, where the reply is
+   * still forming and the next frame is up to a second away.
+   */
+  async subscribeToAgentDraftPreviews(
+    channelId: string,
+    onEvent: (event: RelayEvent) => void,
+  ) {
+    return this.subscribe(
+      {
+        kinds: [KIND_AGENT_DRAFT_PREVIEW],
+        "#h": [channelId],
+        limit: 20,
+        since: Math.floor(Date.now() / 1_000) - 15,
       },
       onEvent,
     );

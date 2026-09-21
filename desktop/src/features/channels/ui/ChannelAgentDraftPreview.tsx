@@ -1,8 +1,11 @@
 import * as React from "react";
-import { Brain } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import {
-  setAgentDraftThoughtsEnabled,
+  useChannelAgentDraft,
+  useChannelDraftPreviews,
+} from "@/features/agents/channelDraftPreviewStore";
+import {
   useAgentDraftPreviewEnabled,
   useAgentDraftThoughtsEnabled,
 } from "@/features/agents/ui/agentDraftPreviewPreference";
@@ -11,7 +14,6 @@ import { selectAgentDraftStream } from "@/features/agents/ui/agentDraftStream";
 import { useAgentTranscript } from "@/features/agents/ui/useObserverEvents";
 import type { UserProfileLookup } from "@/features/profile/lib/identity";
 import { cn } from "@/shared/lib/cn";
-import { Markdown } from "@/shared/ui/markdown";
 import { Shimmer } from "@/shared/ui/Shimmer";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
 import type { BotActivityAgent } from "./BotActivityBar";
@@ -22,9 +24,6 @@ import type { BotActivityAgent } from "./BotActivityBar";
  * still reports every working agent.
  */
 const MAX_STREAMING_AGENTS = 2;
-
-/** Distance from the bottom, in px, still treated as "following the stream". */
-const FOLLOW_THRESHOLD_PX = 24;
 
 type ChannelAgentDraftPreviewProps = {
   agents: BotActivityAgent[];
@@ -37,11 +36,18 @@ type ChannelAgentDraftPreviewProps = {
  * The reply an agent is writing, rendered above the composer where the
  * finished message will land.
  *
- * Nothing new crosses the relay for this: the ACP bridge already streams
- * `agent_message_chunk` and `agent_thought_chunk` to the agent's owner as
- * NIP-44 observer frames, and the desktop transcript already coalesces them.
- * This surface only shows what the owner can already decrypt — a channel
- * member who does not own the agent sees nothing here.
+ * Two sources feed this, in order of reach:
+ *
+ * 1. **Channel previews** (kind 24201) — plaintext and `h`-tagged to the
+ *    channel, so every member sees the same forming reply. Published only by
+ *    harnesses whose operator opted in.
+ * 2. **The owner's observer transcript** — the NIP-44 stream the agent's own
+ *    owner already receives. It covers agents that publish no channel
+ *    preview, but only for their owner.
+ *
+ * The preview is never interactive: it is a moving draft, not a message. The
+ * text the reader can select, copy, react to or reply to is the `kind:9` that
+ * replaces this card when the turn ends.
  */
 export function ChannelAgentDraftPreview({
   agents,
@@ -50,6 +56,7 @@ export function ChannelAgentDraftPreview({
   workingBotPubkeys,
 }: ChannelAgentDraftPreviewProps) {
   const previewEnabled = useAgentDraftPreviewEnabled();
+  useChannelDraftPreviews(previewEnabled ? channelId : null);
   const streamingAgents = React.useMemo(() => {
     const working = new Set(
       workingBotPubkeys.map((pubkey) => pubkey.toLowerCase()),
@@ -92,10 +99,15 @@ function AgentDraftCard({
   const transcript = useAgentTranscript(true, agent.pubkey);
   const previewEnabled = useAgentDraftPreviewEnabled();
   const showThoughts = useAgentDraftThoughtsEnabled();
-  const draft = React.useMemo(
+  const channelDraft = useChannelAgentDraft(channelId, agent.pubkey);
+  const ownerDraft = React.useMemo(
     () => selectAgentDraftStream(transcript, channelId),
     [transcript, channelId],
   );
+  // The channel preview wins when both exist: the owner sees exactly what
+  // their teammates see, so a bug in the shared path cannot hide behind a
+  // private stream that only one person can check.
+  const draft = channelDraft ?? ownerDraft;
   const presentation = React.useMemo(
     () =>
       buildAgentDraftPresentation({
@@ -114,8 +126,9 @@ function AgentDraftCard({
   return (
     <div
       className="rounded-2xl border border-dashed border-border bg-card/80 px-3 py-2 shadow-xs"
-      data-testid="agent-draft-preview"
       data-agent-pubkey={agent.pubkey}
+      data-draft-source={channelDraft ? "channel" : "owner"}
+      data-testid="agent-draft-preview"
     >
       <div className="flex items-center gap-2">
         <UserAvatar
@@ -133,41 +146,20 @@ function AgentDraftCard({
         >
           <Shimmer>{presentation.statusLabel}</Shimmer>
         </p>
-        <button
-          aria-pressed={showThoughts}
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring",
-            showThoughts
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-          )}
-          data-testid="agent-draft-preview-toggle-thoughts"
-          onClick={() => setAgentDraftThoughtsEnabled(!showThoughts)}
-          title={
-            showThoughts
-              ? "Stop showing the agent's reasoning."
-              : "Also show the agent's reasoning while it writes."
-          }
-          type="button"
-        >
-          <Brain aria-hidden="true" className="h-3 w-3" />
-          Thoughts
-        </button>
       </div>
 
-      {/* Keyed on the turn so a reader who scrolled back during one turn
-          starts the next turn following the newest text again. */}
       {presentation.thought !== null ? (
-        <StreamingBlock
-          className="mt-1.5 max-h-24 border-l-2 border-border/70 pl-2 text-xs leading-4 text-muted-foreground"
+        // Keyed on the turn so each new turn starts collapsed again: an
+        // expansion is a choice about one stretch of reasoning, not a
+        // standing preference.
+        <ThoughtBlock
           key={`thought:${draft?.turnKey}`}
-          testId="agent-draft-preview-thought"
           text={presentation.thought}
         />
       ) : null}
 
       {presentation.text !== "" ? (
-        <StreamingBlock
+        <StreamingText
           className="mt-1.5 max-h-40 text-sm"
           key={`text:${draft?.turnKey}`}
           testId="agent-draft-preview-text"
@@ -179,13 +171,68 @@ function AgentDraftCard({
 }
 
 /**
- * A bounded, self-scrolling window over text that is still growing.
+ * Reasoning, collapsed to its first line until the reader asks for the rest.
  *
- * The block follows the newest text while the reader is at the bottom and
- * stops following the moment they scroll up, so reading back through a long
- * reply is not yanked away by the next chunk.
+ * Collapsed is the useful default: the point is seeing *that* the agent
+ * started thinking, which is one line's worth of information. The full text
+ * is several screens of self-correction and is opened deliberately.
  */
-function StreamingBlock({
+function ThoughtBlock({ text }: { text: string }) {
+  const [expanded, setExpanded] = React.useState(false);
+
+  return (
+    <div className="mt-1.5 flex items-start gap-1">
+      <button
+        aria-expanded={expanded}
+        aria-label={expanded ? "Collapse reasoning" : "Expand reasoning"}
+        className="mt-px shrink-0 rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+        data-testid="agent-draft-preview-thought-toggle"
+        onClick={() => setExpanded((current) => !current)}
+        type="button"
+      >
+        {expanded ? (
+          <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" />
+        )}
+      </button>
+      {expanded ? (
+        <StreamingText
+          className="max-h-32 border-l-2 border-border/70 pl-2 text-xs leading-4 text-muted-foreground/80"
+          testId="agent-draft-preview-thought"
+          text={text}
+        />
+      ) : (
+        <p
+          className="min-w-0 flex-1 truncate text-xs leading-4 text-muted-foreground/80"
+          data-collapsed="true"
+          data-testid="agent-draft-preview-thought"
+        >
+          {text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A bounded window over text that is still growing.
+ *
+ * Two deliberate choices:
+ *
+ * - **Inert, not just unstyled.** The draft must not be selectable,
+ *   clickable, focusable, or reachable by assistive tech as if it were a
+ *   message. The text a reader can act on is the `kind:9` that replaces this
+ *   card when the turn ends.
+ * - **Plain text, not Markdown.** A draft is routinely mid-syntax — an
+ *   unclosed fence or a half-typed link — and rendering that as Markdown
+ *   makes the reply jump between layouts as it grows. It also keeps links out
+ *   of a surface that must not be interactive.
+ *
+ * Each arriving chunk fades in on its own, so the reply reads as written
+ * rather than replaced.
+ */
+function StreamingText({
   className,
   testId,
   text,
@@ -195,34 +242,51 @@ function StreamingBlock({
   text: string;
 }) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const followRef = React.useRef(true);
+  const [{ settled, chunk }, setRendered] = React.useState({
+    settled: "",
+    chunk: text,
+  });
 
-  const handleScroll = React.useCallback(() => {
-    const element = scrollRef.current;
-    if (!element) {
-      return;
-    }
-    followRef.current =
-      element.scrollHeight - element.scrollTop - element.clientHeight <=
-      FOLLOW_THRESHOLD_PX;
-  }, []);
+  React.useEffect(() => {
+    setRendered((current) => {
+      const previous = current.settled + current.chunk;
+      if (text === previous) {
+        return current;
+      }
+      // Previews carry the cumulative text, so the common case is an append.
+      // Anything else — the harness dropped the head of a long reply, or a
+      // new turn reused this block — is shown as one new chunk.
+      return text.startsWith(previous)
+        ? { settled: previous, chunk: text.slice(previous.length) }
+        : { settled: "", chunk: text };
+    });
+  }, [text]);
 
   React.useEffect(() => {
     const element = scrollRef.current;
-    if (text === "" || !element || !followRef.current) {
+    if (!element || settled.length + chunk.length === 0) {
       return;
     }
     element.scrollTop = element.scrollHeight;
-  }, [text]);
+  }, [settled, chunk]);
 
   return (
     <div
-      className={cn("min-w-0 overflow-y-auto overscroll-contain", className)}
+      className={cn(
+        "min-w-0 flex-1 select-none overflow-hidden whitespace-pre-wrap break-words leading-5 text-muted-foreground",
+        className,
+      )}
       data-testid={testId}
-      onScroll={handleScroll}
+      inert
       ref={scrollRef}
     >
-      <Markdown className="leading-5" content={text || " "} />
+      {settled}
+      <span
+        className="animate-in fade-in duration-500 motion-reduce:animate-none"
+        key={settled.length}
+      >
+        {chunk}
+      </span>
     </div>
   );
 }

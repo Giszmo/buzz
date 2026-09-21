@@ -1,18 +1,24 @@
-//! Typed event builder functions (38 builders).
+//! Typed event builder functions (39 builders).
 //!
 //! All functions return `Result<nostr::EventBuilder, SdkError>`.
 //! The caller signs: `builder.sign_with_keys(&keys)?`.
 
 use buzz_core::{
+    draft_preview::{
+        clamp_draft_text, DRAFT_PART_REPLY, DRAFT_PART_TAG, DRAFT_PART_THOUGHT, DRAFT_SEQ_TAG,
+        DRAFT_STATUS_DONE, DRAFT_STATUS_TAG, DRAFT_STATUS_WRITING, DRAFT_TRUNCATED_TAG,
+        DRAFT_TURN_TAG,
+    },
     kind::{
-        KIND_AGENT_OBSERVER_FRAME, KIND_APPROVAL_DENY, KIND_APPROVAL_GRANT, KIND_DELETION,
-        KIND_DM_ADD_MEMBER, KIND_DM_OPEN, KIND_EMOJI_SET, KIND_GIT_ISSUE, KIND_GIT_PATCH,
-        KIND_GIT_PR_UPDATE, KIND_GIT_PULL_REQUEST, KIND_GIT_REPO_ANNOUNCEMENT,
-        KIND_GIT_STATUS_CLOSED, KIND_GIT_STATUS_DRAFT, KIND_GIT_STATUS_MERGED,
-        KIND_GIT_STATUS_OPEN, KIND_IA_ARCHIVE_REQUEST, KIND_IA_UNARCHIVE_REQUEST,
-        KIND_MODERATION_BAN, KIND_MODERATION_RESOLVE_REPORT, KIND_MODERATION_TIMEOUT,
-        KIND_MODERATION_UNBAN, KIND_MODERATION_UNTIMEOUT, KIND_PRESENCE_UPDATE, KIND_PROJECT,
-        KIND_USER_STATUS, KIND_WORKFLOW_DEF, KIND_WORKFLOW_TRIGGER,
+        KIND_AGENT_DRAFT_PREVIEW, KIND_AGENT_OBSERVER_FRAME, KIND_APPROVAL_DENY,
+        KIND_APPROVAL_GRANT, KIND_DELETION, KIND_DM_ADD_MEMBER, KIND_DM_OPEN, KIND_EMOJI_SET,
+        KIND_GIT_ISSUE, KIND_GIT_PATCH, KIND_GIT_PR_UPDATE, KIND_GIT_PULL_REQUEST,
+        KIND_GIT_REPO_ANNOUNCEMENT, KIND_GIT_STATUS_CLOSED, KIND_GIT_STATUS_DRAFT,
+        KIND_GIT_STATUS_MERGED, KIND_GIT_STATUS_OPEN, KIND_IA_ARCHIVE_REQUEST,
+        KIND_IA_UNARCHIVE_REQUEST, KIND_MODERATION_BAN, KIND_MODERATION_RESOLVE_REPORT,
+        KIND_MODERATION_TIMEOUT, KIND_MODERATION_UNBAN, KIND_MODERATION_UNTIMEOUT,
+        KIND_PRESENCE_UPDATE, KIND_PROJECT, KIND_USER_STATUS, KIND_WORKFLOW_DEF,
+        KIND_WORKFLOW_TRIGGER,
     },
     observer::{
         content_looks_like_nip44, OBSERVER_AGENT_TAG, OBSERVER_FRAME_CONTROL, OBSERVER_FRAME_TAG,
@@ -297,6 +303,86 @@ pub fn build_agent_observer_frame(
         encrypted_content,
     )
     .tags(tags))
+}
+
+/// One channel-visible preview of the reply an agent is composing.
+///
+/// `text` is the cumulative text so far, not a delta: previews ride ephemeral
+/// events, and a reader that missed one frame must still be correct after the
+/// next. `seq` orders revisions of the same `(turn, part)` pair.
+pub struct AgentDraftPreview<'a> {
+    /// Channel the finished reply will land in.
+    pub channel_id: Uuid,
+    /// Turn the preview belongs to.
+    pub turn_id: &'a str,
+    /// Whether this frame carries the reply or the reasoning.
+    pub part: AgentDraftPart,
+    /// Monotonic revision counter for this `(turn, part)`.
+    pub seq: u64,
+    /// Cumulative text so far. Clamped to the tail that fits the size cap.
+    pub text: &'a str,
+    /// Event that triggered the turn, when the turn has one. Lets a reader
+    /// place the preview in the thread the reply will land in.
+    pub triggering_event_id: Option<&'a str>,
+    /// `false` marks the final frame of the turn.
+    pub writing: bool,
+}
+
+/// Which half of a turn a draft preview carries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AgentDraftPart {
+    /// The reply text the agent will publish.
+    Reply,
+    /// The agent's reasoning.
+    Thought,
+}
+
+impl AgentDraftPart {
+    fn as_tag_value(self) -> &'static str {
+        match self {
+            AgentDraftPart::Reply => DRAFT_PART_REPLY,
+            AgentDraftPart::Thought => DRAFT_PART_THOUGHT,
+        }
+    }
+}
+
+/// Build a channel-visible agent draft preview (kind 24201).
+///
+/// Ephemeral and plaintext: the relay gates it on `h`-tag membership and never
+/// stores it. Oversized text is clamped to its tail rather than rejected — a
+/// preview that cannot be published is worse than one that shows the most
+/// recent few kilobytes, and the finished `kind:9` carries the whole message.
+pub fn build_agent_draft_preview(
+    preview: &AgentDraftPreview<'_>,
+) -> Result<EventBuilder, SdkError> {
+    if preview.turn_id.is_empty() {
+        return Err(SdkError::InvalidInput("turn_id must not be empty".into()));
+    }
+    let (text, truncated) = clamp_draft_text(preview.text);
+
+    let mut tags = vec![
+        tag(&["h", &preview.channel_id.to_string()])?,
+        tag(&[DRAFT_TURN_TAG, preview.turn_id])?,
+        tag(&[DRAFT_PART_TAG, preview.part.as_tag_value()])?,
+        tag(&[DRAFT_SEQ_TAG, &preview.seq.to_string()])?,
+        tag(&[
+            DRAFT_STATUS_TAG,
+            if preview.writing {
+                DRAFT_STATUS_WRITING
+            } else {
+                DRAFT_STATUS_DONE
+            },
+        ])?,
+    ];
+    if truncated {
+        tags.push(tag(&[DRAFT_TRUNCATED_TAG, "1"])?);
+    }
+    if let Some(event_id) = preview.triggering_event_id {
+        let event_id = check_hex_exact(event_id, 64, "triggering_event_id")?;
+        tags.push(tag(&["e", &event_id])?);
+    }
+
+    Ok(EventBuilder::new(Kind::Custom(KIND_AGENT_DRAFT_PREVIEW as u16), text).tags(tags))
 }
 
 /// Build a forum post thread root (kind 45001).
@@ -2482,6 +2568,107 @@ mod tests {
             &agent.public_key().to_hex()
         ));
         assert!(has_tag(&ev, OBSERVER_FRAME_TAG, OBSERVER_FRAME_TELEMETRY));
+    }
+
+    #[test]
+    fn agent_draft_preview_happy_path() {
+        let cid = uuid();
+        let trigger = event_id().to_hex();
+        let ev = sign(
+            build_agent_draft_preview(&AgentDraftPreview {
+                channel_id: cid,
+                turn_id: "turn-1",
+                part: AgentDraftPart::Reply,
+                seq: 7,
+                text: "half a sen",
+                triggering_event_id: Some(&trigger),
+                writing: true,
+            })
+            .unwrap(),
+        );
+
+        assert_eq!(ev.kind.as_u16(), KIND_AGENT_DRAFT_PREVIEW as u16);
+        assert_eq!(ev.content, "half a sen");
+        assert!(has_tag(&ev, "h", &cid.to_string()));
+        assert!(has_tag(&ev, DRAFT_TURN_TAG, "turn-1"));
+        assert!(has_tag(&ev, DRAFT_PART_TAG, DRAFT_PART_REPLY));
+        assert!(has_tag(&ev, DRAFT_SEQ_TAG, "7"));
+        assert!(has_tag(&ev, DRAFT_STATUS_TAG, DRAFT_STATUS_WRITING));
+        assert!(has_tag(&ev, "e", &trigger));
+        assert!(tag_values(&ev, DRAFT_TRUNCATED_TAG).is_empty());
+    }
+
+    #[test]
+    fn agent_draft_preview_marks_done_and_thought() {
+        let ev = sign(
+            build_agent_draft_preview(&AgentDraftPreview {
+                channel_id: uuid(),
+                turn_id: "turn-1",
+                part: AgentDraftPart::Thought,
+                seq: 0,
+                text: "",
+                triggering_event_id: None,
+                writing: false,
+            })
+            .unwrap(),
+        );
+
+        assert!(has_tag(&ev, DRAFT_PART_TAG, DRAFT_PART_THOUGHT));
+        assert!(has_tag(&ev, DRAFT_STATUS_TAG, DRAFT_STATUS_DONE));
+        assert!(tag_values(&ev, "e").is_empty());
+    }
+
+    #[test]
+    fn agent_draft_preview_clamps_oversized_text() {
+        let long = "x".repeat(buzz_core::draft_preview::DRAFT_MAX_TEXT_BYTES + 500);
+        let ev = sign(
+            build_agent_draft_preview(&AgentDraftPreview {
+                channel_id: uuid(),
+                turn_id: "turn-1",
+                part: AgentDraftPart::Reply,
+                seq: 1,
+                text: &long,
+                triggering_event_id: None,
+                writing: true,
+            })
+            .unwrap(),
+        );
+
+        assert_eq!(
+            ev.content.len(),
+            buzz_core::draft_preview::DRAFT_MAX_TEXT_BYTES
+        );
+        assert!(has_tag(&ev, DRAFT_TRUNCATED_TAG, "1"));
+    }
+
+    #[test]
+    fn agent_draft_preview_rejects_empty_turn_id() {
+        let err = build_agent_draft_preview(&AgentDraftPreview {
+            channel_id: uuid(),
+            turn_id: "",
+            part: AgentDraftPart::Reply,
+            seq: 1,
+            text: "hi",
+            triggering_event_id: None,
+            writing: true,
+        })
+        .unwrap_err();
+        assert!(matches!(err, SdkError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn agent_draft_preview_rejects_malformed_trigger_id() {
+        let err = build_agent_draft_preview(&AgentDraftPreview {
+            channel_id: uuid(),
+            turn_id: "turn-1",
+            part: AgentDraftPart::Reply,
+            seq: 1,
+            text: "hi",
+            triggering_event_id: Some("not-an-event-id"),
+            writing: true,
+        })
+        .unwrap_err();
+        assert!(matches!(err, SdkError::InvalidInput(_)));
     }
 
     #[test]
