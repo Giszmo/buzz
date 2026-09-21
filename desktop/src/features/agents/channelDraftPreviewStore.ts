@@ -5,6 +5,7 @@ import {
   EMPTY_DRAFT_PREVIEW_STATE,
   parseChannelDraftPreview,
   pruneChannelDraftPreviews,
+  selectChannelDraftAgentPubkeys,
   selectChannelDraftStream,
   type ChannelDraftPreviewState,
 } from "@/features/agents/channelDraftPreviews";
@@ -154,6 +155,26 @@ function dropChannel(channelId: string) {
   if (changed) {
     setState(next);
   }
+}
+
+/**
+ * Pubkeys of every agent publishing a preview into this channel right now.
+ *
+ * This is what makes the card appear at all for a harness the client does not
+ * know as an agent: the frames themselves name the writer.
+ */
+export function useChannelDraftAgentPubkeys(
+  channelId: string | null | undefined,
+): string[] {
+  const previews = React.useSyncExternalStore(
+    subscribeStore,
+    getSnapshot,
+    () => EMPTY_DRAFT_PREVIEW_STATE,
+  );
+  return React.useMemo(
+    () => selectChannelDraftAgentPubkeys(previews, channelId),
+    [previews, channelId],
+  );
 }
 
 /** The forming reply one agent is publishing into this channel, if any. */

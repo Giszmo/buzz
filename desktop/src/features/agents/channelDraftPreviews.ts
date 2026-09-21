@@ -176,6 +176,43 @@ export function pruneChannelDraftPreviews(
   return changed ? next : state;
 }
 
+const EMPTY_AGENT_PUBKEYS: string[] = [];
+
+/**
+ * Every agent with a live preview in this channel, normalized and sorted.
+ *
+ * A frame is its own evidence that an agent is writing here. The reader is
+ * deliberately asked for nothing else — in particular not that it already
+ * recognise the publisher as an agent. A self-hosted harness that joins a
+ * channel as an ordinary member publishes no agent announcement and declares
+ * no owner in its profile, so a reader gated on its own agent roster drops
+ * every frame such a harness will ever send: the exact case this kind exists
+ * for. Publishing is already membership-gated at the relay, which is the only
+ * gate this surface needs.
+ */
+export function selectChannelDraftAgentPubkeys(
+  state: ChannelDraftPreviewState,
+  channelId: string | null | undefined,
+  nowMs: number = Date.now(),
+): string[] {
+  if (!channelId) {
+    return EMPTY_AGENT_PUBKEYS;
+  }
+  const pubkeys: string[] = [];
+  for (const entry of Object.values(state)) {
+    if (entry.channelId !== channelId || entry.expiresAt <= nowMs) {
+      continue;
+    }
+    // An entry with no text yet renders no card, so it must not consume one
+    // of the few streaming slots above the composer.
+    if ((entry.reply?.text.trim() ?? "") === "") {
+      continue;
+    }
+    pubkeys.push(entry.agentPubkey);
+  }
+  return pubkeys.length === 0 ? EMPTY_AGENT_PUBKEYS : pubkeys.sort();
+}
+
 /**
  * The live draft for one agent in one channel, in the same shape the
  * owner-scoped transcript selector produces, so the card renders either

@@ -8,6 +8,8 @@ import { TEST_IDENTITIES, installMockBridge } from "../helpers/bridge";
 
 const AGENTS_CHANNEL_ID = "94a444a4-c0a3-5966-ab05-530c6ddc2301";
 const AGENT_PUBKEY = TEST_IDENTITIES.alice.pubkey;
+// A publisher this client has no agent record, session or owner link for.
+const STRANGER_PUBKEY = TEST_IDENTITIES.charlie.pubkey;
 const TURN_ID = "draft-stream-turn";
 const SESSION_ID = "draft-stream-session";
 const SHOTS = "test-results/channel-agent-draft-stream";
@@ -77,18 +79,35 @@ async function emitChannelDraft(
     seq: number;
     text: string;
     done?: boolean;
+    pubkey?: string;
   },
 ) {
+  const { pubkey = AGENT_PUBKEY, ...draft } = input;
   await page.evaluate(
-    ({ agentPubkey, turnId, draft }) => {
+    ({ agentPubkey, turnId, draft: payload }) => {
       window.__BUZZ_E2E_EMIT_MOCK_AGENT_DRAFT__?.({
         channelName: "agents",
         pubkey: agentPubkey,
         turnId,
-        ...draft,
+        ...payload,
       });
     },
-    { agentPubkey: AGENT_PUBKEY, turnId: TURN_ID, draft: input },
+    { agentPubkey: pubkey, turnId: TURN_ID, draft },
+  );
+}
+
+/** Open the channel without putting any agent into the working set. */
+async function openChannelIdle(page: Page) {
+  await page.goto("/");
+  await page.getByTestId("channel-agents").click();
+  await expect(page.getByTestId("chat-title")).toHaveText("agents");
+  await page.waitForFunction(
+    ({ channelName, kind }) =>
+      window.__BUZZ_E2E_HAS_MOCK_LIVE_SUBSCRIPTION__?.({
+        channelName,
+        kind,
+      }) ?? false,
+    { channelName: "agents", kind: KIND_AGENT_DRAFT_PREVIEW },
   );
 }
 
@@ -234,6 +253,58 @@ test.describe("agent draft streaming above the composer", () => {
       done: true,
       part: "reply",
       seq: 3,
+      text: REPLY_TEXT,
+    });
+    await expect(page.getByTestId("agent-draft-preview")).toHaveCount(0);
+  });
+
+  test("streams a harness this client does not know is an agent", async ({
+    page,
+  }) => {
+    // The case every self-hosted harness is in: it joined the channel as an
+    // ordinary member, announced no agent record and declared no owner, so
+    // this client holds no session with it and never counts it as working.
+    // Before the frames were allowed to stand on their own, its previews were
+    // received and then dropped for want of a roster entry — nothing rendered
+    // for anyone, which is exactly what it looked like in production.
+    await openChannelIdle(page);
+    await expect(page.getByTestId("bot-activity-composer-trigger")).toHaveCount(
+      0,
+    );
+
+    await emitChannelDraft(page, {
+      part: "reply",
+      pubkey: STRANGER_PUBKEY,
+      seq: 1,
+      text: REPLY_TEXT,
+    });
+
+    const card = page.getByTestId("agent-draft-preview");
+    await expect(card).toBeVisible();
+    await expect(card).toHaveAttribute("data-agent-pubkey", STRANGER_PUBKEY);
+    await expect(card).toHaveAttribute("data-draft-source", "channel");
+    await expect(card.getByTestId("agent-draft-preview-status")).toContainText(
+      "is writing",
+    );
+    await expect(card.getByTestId("agent-draft-preview-text")).toContainText(
+      REPLY_TEXT,
+    );
+
+    // Still no working signal anywhere: the card came from the frame alone.
+    await expect(page.getByTestId("bot-activity-composer-trigger")).toHaveCount(
+      0,
+    );
+
+    await page.screenshot({
+      animations: "disabled",
+      path: `${SHOTS}/draft-unknown-harness.png`,
+    });
+
+    await emitChannelDraft(page, {
+      done: true,
+      part: "reply",
+      pubkey: STRANGER_PUBKEY,
+      seq: 2,
       text: REPLY_TEXT,
     });
     await expect(page.getByTestId("agent-draft-preview")).toHaveCount(0);

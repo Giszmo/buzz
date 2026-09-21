@@ -7,6 +7,7 @@ import {
   EMPTY_DRAFT_PREVIEW_STATE,
   parseChannelDraftPreview,
   pruneChannelDraftPreviews,
+  selectChannelDraftAgentPubkeys,
   selectChannelDraftStream,
 } from "./channelDraftPreviews.ts";
 
@@ -193,4 +194,43 @@ test("an uppercase author pubkey still matches its agent", () => {
     previewEvent({ pubkey: AGENT.toUpperCase() }),
   );
   assert.equal(selectChannelDraftStream(state, CHANNEL, AGENT).text, "forming");
+});
+
+test("a frame names its own writer, with no agent roster involved", () => {
+  const other = "cd".repeat(32);
+  let state = apply(EMPTY_DRAFT_PREVIEW_STATE, previewEvent());
+  state = apply(state, previewEvent({ pubkey: other, turnId: "turn-2" }));
+  assert.deepEqual(
+    selectChannelDraftAgentPubkeys(state, CHANNEL, NOW_SECONDS * 1_000),
+    [AGENT, other].sort(),
+  );
+});
+
+test("draft agents are scoped to one channel and expire with the preview", () => {
+  const state = apply(EMPTY_DRAFT_PREVIEW_STATE, previewEvent());
+  const now = NOW_SECONDS * 1_000;
+  assert.deepEqual(selectChannelDraftAgentPubkeys(state, "other", now), []);
+  assert.deepEqual(selectChannelDraftAgentPubkeys(state, null, now), []);
+  assert.deepEqual(selectChannelDraftAgentPubkeys(state, CHANNEL, now), [
+    AGENT,
+  ]);
+  assert.deepEqual(
+    selectChannelDraftAgentPubkeys(
+      state,
+      CHANNEL,
+      now + DRAFT_PREVIEW_TTL_MS + 1,
+    ),
+    [],
+  );
+});
+
+test("an agent with no text yet claims no streaming slot", () => {
+  const state = apply(
+    EMPTY_DRAFT_PREVIEW_STATE,
+    previewEvent({ text: "   \n" }),
+  );
+  assert.deepEqual(
+    selectChannelDraftAgentPubkeys(state, CHANNEL, NOW_SECONDS * 1_000),
+    [],
+  );
 });
