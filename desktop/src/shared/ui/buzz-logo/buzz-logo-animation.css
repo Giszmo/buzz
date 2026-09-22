@@ -1,3 +1,10 @@
+/* Imported by BuzzLogoAnimation.tsx rather than through styles/globals.css, so
+   Tailwind needs the reference to resolve `@variant motion-reduce` to the
+   custom variant defined there. Without it the variant silently falls back to
+   Tailwind's stock media-query-only version and the in-app Reduce motion
+   setting misses this file. `@reference` adds context, not output. */
+@reference "../../styles/globals.css";
+
 .buzz-logo {
   display: grid;
   place-items: center;
@@ -71,17 +78,21 @@
   transform-origin: center;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .buzz-logo animate {
+.buzz-logo animate {
+  @variant motion-reduce {
     display: none;
   }
+}
 
-  .buzz-logo--pulse .buzz-logo__mark {
+.buzz-logo--pulse .buzz-logo__mark {
+  @variant motion-reduce {
     animation: none;
     opacity: 0.8;
   }
+}
 
-  .buzz-logo--scale-pulse .buzz-logo__mark {
+.buzz-logo--scale-pulse .buzz-logo__mark {
+  @variant motion-reduce {
     animation: none;
     transform: none;
   }

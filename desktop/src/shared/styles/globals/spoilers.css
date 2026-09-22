@@ -118,8 +118,8 @@
   width: auto;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .buzz-spoiler__particles {
+.buzz-spoiler__particles {
+  @variant motion-reduce {
     transition: none;
   }
 }

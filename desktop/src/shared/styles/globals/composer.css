@@ -54,12 +54,12 @@
   bottom: var(--composer-dock-active-rail);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .composer-dock,
-  .composer-dock-quiet-spacer,
-  .composer-dock-rail-mask,
-  .composer-overlay-corner-masks::before,
-  .composer-overlay-corner-masks::after {
+.composer-dock,
+.composer-dock-quiet-spacer,
+.composer-dock-rail-mask,
+.composer-overlay-corner-masks::before,
+.composer-overlay-corner-masks::after {
+  @variant motion-reduce {
     transition: none;
   }
 }

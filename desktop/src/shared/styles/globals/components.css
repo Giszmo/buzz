@@ -230,34 +230,46 @@
     will-change: opacity, transform;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .buzz-side-panel-enter {
+  .buzz-side-panel-enter {
+    @variant motion-reduce {
       animation: none;
       will-change: auto;
     }
+  }
 
-    .buzz-huddle-app-surface {
+  .buzz-huddle-app-surface {
+    @variant motion-reduce {
       transition: none;
     }
+  }
 
-    .buzz-huddle-drawer-backdrop {
+  .buzz-huddle-drawer-backdrop {
+    @variant motion-reduce {
       transition: none;
     }
+  }
 
-    .buzz-huddle-mic-meter-bar {
+  .buzz-huddle-mic-meter-bar {
+    @variant motion-reduce {
       transition: none;
     }
+  }
 
-    .buzz-huddle-speaking-avatar {
+  .buzz-huddle-speaking-avatar {
+    @variant motion-reduce {
       isolation: auto;
     }
+  }
 
-    .buzz-huddle-speaking-squircle {
+  .buzz-huddle-speaking-squircle {
+    @variant motion-reduce {
       transition: none;
       will-change: auto;
     }
+  }
 
-    .buzz-huddle-participant-tile {
+  .buzz-huddle-participant-tile {
+    @variant motion-reduce {
       animation: none;
       will-change: auto;
     }
@@ -735,25 +747,31 @@
     }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .buzz-onboarding-runtime-check,
-    .buzz-onboarding-runtime-checkmark {
+  .buzz-onboarding-runtime-check,
+  .buzz-onboarding-runtime-checkmark {
+    @variant motion-reduce {
       transition: none;
     }
+  }
 
-    .buzz-onboarding-runtime-pill {
+  .buzz-onboarding-runtime-pill {
+    @variant motion-reduce {
       animation: none;
       will-change: auto;
     }
+  }
 
-    .buzz-onboarding-runtime-setup[data-setup-flash="true"] {
+  .buzz-onboarding-runtime-setup[data-setup-flash="true"] {
+    @variant motion-reduce {
       animation: none;
       outline: 2px solid var(--buzz-welcome-chartreuse);
       outline-offset: 2px;
       will-change: auto;
     }
+  }
 
-    .buzz-onboarding-runtime-setup[data-setup-flash="true"]::after {
+  .buzz-onboarding-runtime-setup[data-setup-flash="true"]::after {
+    @variant motion-reduce {
       animation: none;
       content: none;
       will-change: auto;
@@ -786,15 +804,17 @@
     }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .buzz-onboarding-transition-content {
+  .buzz-onboarding-transition-content {
+    @variant motion-reduce {
       animation: none;
       filter: none;
       opacity: 1;
       transform: none;
     }
+  }
 
-    .buzz-onboarding-name-placeholder-caret {
+  .buzz-onboarding-name-placeholder-caret {
+    @variant motion-reduce {
       animation: none;
     }
   }

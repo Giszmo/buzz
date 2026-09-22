@@ -41,11 +41,17 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .motion-enter-conversation {
+.motion-enter-conversation {
+  @variant motion-reduce {
     animation-duration: 1ms;
   }
+}
 
+/* The keyframe override stays behind the media query: `@variant` has to be
+   nested inside the rule it modifies, and `@keyframes` is not a rule. The 1ms
+   duration above is what actually collapses the animation, so the in-app
+   Reduce motion setting does not need this. */
+@media (prefers-reduced-motion: reduce) {
   @keyframes motion-enter-conversation {
     from,
     to {
@@ -95,13 +101,16 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .motion-kickoff-character-enter,
-  .motion-kickoff-stage-exit {
+.motion-kickoff-character-enter,
+.motion-kickoff-stage-exit {
+  @variant motion-reduce {
     animation-delay: 0ms;
     animation-duration: 1ms;
   }
+}
 
+/* See the note above: the keyframe override stays behind the media query. */
+@media (prefers-reduced-motion: reduce) {
   @keyframes motion-kickoff-character-enter {
     from,
     to {

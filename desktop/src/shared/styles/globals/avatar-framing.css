@@ -148,8 +148,8 @@
   transform: translateY(0);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .buzz-avatar-framing-slider-tip {
+.buzz-avatar-framing-slider-tip {
+  @variant motion-reduce {
     transform: none;
     transition: opacity 150ms ease;
   }

@@ -19,8 +19,8 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .video-review-controls {
+.video-review-controls {
+  @variant motion-reduce {
     transition: none;
   }
 }

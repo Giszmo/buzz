@@ -16,6 +16,10 @@ import {
   type LinkPreviewStyle,
 } from "@/shared/lib/linkPreviewStylePreference";
 import { isLinuxPlatform } from "@/shared/lib/platform";
+import {
+  setReduceMotion,
+  useReduceMotion,
+} from "@/shared/lib/reduceMotionPreference";
 import type { ResolvedLinkPreview } from "@/shared/lib/useResolvedLinkPreviews";
 import { LinkPreviewAttachmentPresentation } from "@/shared/ui/link-preview-attachment";
 import type { LinkPreviewImageLightboxProps } from "@/shared/ui/rich-link-preview-attachment";
@@ -69,6 +73,41 @@ export function ProminentActiveTabSetting() {
         data-testid="prominent-active-tab-toggle"
         id="prominent-active-tab-switch"
         onCheckedChange={setProminentActiveTab}
+      />
+    </SettingsOptionRow>
+  );
+}
+
+/**
+ * Looping animations are the expensive ones. A single infinite CSS animation
+ * keeps the compositor committing frames for as long as it runs, so the typing
+ * indicator's shimmer costs the same whether one person is typing or eight —
+ * measurable as tens of percent of a core on WebKitGTK. This switch turns on
+ * the same reduced-motion behaviour the OS preference triggers, for people who
+ * want the app still without making their whole desktop still.
+ */
+export function ReduceMotionSetting() {
+  const reduceMotion = useReduceMotion();
+
+  return (
+    <SettingsOptionRow data-testid="reduce-motion-row">
+      <div className="min-w-0">
+        <label className="text-sm font-medium" htmlFor="reduce-motion-switch">
+          Reduce motion
+        </label>
+        <p
+          className="text-sm font-normal text-muted-foreground/70"
+          data-settings-subcopy
+        >
+          Hold animations still, including the typing indicator and agent
+          activity shimmer. Already on if your system asks for reduced motion.
+        </p>
+      </div>
+      <Switch
+        checked={reduceMotion}
+        data-testid="reduce-motion-toggle"
+        id="reduce-motion-switch"
+        onCheckedChange={setReduceMotion}
       />
     </SettingsOptionRow>
   );

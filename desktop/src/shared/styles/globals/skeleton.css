@@ -101,14 +101,16 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .t-skel-skeleton,
-  .t-skel-content {
+.t-skel-skeleton,
+.t-skel-content {
+  @variant motion-reduce {
     transition: none;
   }
+}
 
-  .t-skel-bar.is-pulsing,
-  .t-skel-skeleton.is-pulsing > :not(:has(.t-skel-bar)) {
+.t-skel-bar.is-pulsing,
+.t-skel-skeleton.is-pulsing > :not(:has(.t-skel-bar)) {
+  @variant motion-reduce {
     animation: none;
   }
 }

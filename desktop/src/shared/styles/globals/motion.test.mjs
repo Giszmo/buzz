@@ -17,8 +17,10 @@ test("conversation arrival uses shared motion tokens", () => {
 });
 
 test("conversation arrival has a reduced-motion treatment", () => {
+  // `@variant motion-reduce` covers both the OS preference and the in-app
+  // Reduce motion setting — see the custom variant in styles/globals.css.
   assert.match(
     motionCss,
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.motion-enter-conversation/,
+    /\.motion-enter-conversation \{\s*@variant motion-reduce \{/,
   );
 });

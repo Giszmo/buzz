@@ -35,3 +35,22 @@
 /* The app persists its selected theme on the root `.dark` class. Use that
    class, rather than the system preference, for every `dark:` utility. */
 @custom-variant dark (&:where(.dark, .dark *));
+/* Reduced motion has two sources: the OS accessibility preference, and the
+   in-app Reduce motion setting, which writes `data-reduce-motion` on the root
+   element (see shared/lib/reduceMotionPreference.ts). Overriding the variant
+   here means both `motion-reduce:` utilities and the `@variant motion-reduce`
+   blocks in the global stylesheets honour either source, with no rule written
+   twice. The setting only ever adds reduction, so the OS preference still
+   applies on its own.
+
+   Use `@variant motion-reduce` nested inside the rule it modifies, never at
+   the top level of a stylesheet: the `&` below has no parent selector there
+   and Tailwind emits a dangling `&:where(...)` block. */
+@custom-variant motion-reduce {
+  @media (prefers-reduced-motion: reduce) {
+    @slot;
+  }
+  &:where([data-reduce-motion="true"], [data-reduce-motion="true"] *) {
+    @slot;
+  }
+}

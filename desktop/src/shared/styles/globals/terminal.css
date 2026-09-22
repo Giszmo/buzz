@@ -317,10 +317,10 @@
     width: 16px;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .buzz-content-primary,
-    .buzz-terminal-dock-host:has(.buzz-terminal-substrate),
-    .buzz-terminal-substrate {
+  .buzz-content-primary,
+  .buzz-terminal-dock-host:has(.buzz-terminal-substrate),
+  .buzz-terminal-substrate {
+    @variant motion-reduce {
       transition: none;
     }
   }
