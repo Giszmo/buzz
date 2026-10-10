@@ -30,6 +30,7 @@ import { useHuddlePresentation } from "@/app/useHuddlePresentation";
 import { shouldShowSidebarChannel } from "@/app/huddleChannelVisibility";
 import {
   channelsQueryKey,
+  useChannelsFetched,
   useChannelsQuery,
   useCreateChannelMutation,
   useHideDmMutation,
@@ -251,6 +252,7 @@ export function AppShell() {
     useHomeFeedNotifications(identityQuery.data?.pubkey);
   const feedItemState = useFeedItemState(identityQuery.data?.pubkey);
   const channelsQuery = useChannelsQuery();
+  const channelsFetched = useChannelsFetched();
   const channels = channelsQuery.data ?? [];
   useReminderNotifications(
     identityQuery.data?.pubkey,
@@ -296,8 +298,7 @@ export function AppShell() {
     const activeCommunityId = communitiesHook.activeCommunity?.id;
     if (
       hasRestoredCommunityDestinationRef.current ||
-      !channelsQuery.isSuccess ||
-      channelsQuery.dataUpdatedAt === 0 ||
+      !channelsFetched ||
       !activeCommunityId
     ) {
       return;
@@ -331,8 +332,7 @@ export function AppShell() {
       void goChannel(destination.channelId, { replace: true });
     }
   }, [
-    channelsQuery.dataUpdatedAt,
-    channelsQuery.isSuccess,
+    channelsFetched,
     communitiesHook.activeCommunity?.id,
     goChannel,
     goHome,
