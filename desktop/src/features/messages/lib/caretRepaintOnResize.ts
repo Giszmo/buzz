@@ -1,16 +1,8 @@
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 
-/**
- * Re-applies the caret after the editor changes size.
- *
- * The composer is anchored to the bottom, so a new line grows it upward and
- * moves the text under the caret. WebKitGTK keeps painting the caret at its
- * cached position from before the move: Shift+Enter twice in quick
- * succession leaves a steady second caret on the line above the real one
- * until the next keystroke. Repainting does not clear it; handing WebKit the
- * same selection again does, because that recomputes the caret rect.
- */
+// WebKit keeps painting the caret where it was before the bottom-anchored composer grew;
+// re-adding the same range clears it (cf. ProseMirror/prosemirror#1092, which only covers selection changes).
 export const CaretRepaintOnResize = Extension.create({
   name: "caretRepaintOnResize",
 
